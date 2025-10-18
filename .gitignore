@@ -30,6 +30,10 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
+# TypeScript build info
+*.tsbuildinfo
+web/tsconfig.tsbuildinfo
+
 # Virtual Environment
 venv/
 env/

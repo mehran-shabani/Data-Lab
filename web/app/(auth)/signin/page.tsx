@@ -75,9 +75,14 @@ export default function SignIn() {
             </div>
 
             <div className="text-sm">
-              <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
+              <button
+                type="button"
+                disabled
+                className="font-medium text-gray-400 cursor-not-allowed"
+                title="به زودی فعال می‌شود"
+              >
                 فراموشی رمز عبور؟
-              </a>
+              </button>
             </div>
           </div>
 

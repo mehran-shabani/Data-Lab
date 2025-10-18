@@ -47,10 +47,10 @@ export default function Dashboard() {
               این داشبورد در حال توسعه است. قابلیت‌های بیشتر در پرامپت‌های بعدی اضافه خواهد شد.
             </p>
             <div className="flex gap-3">
-              <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+              <button type="button" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
                 شروع کنید
               </button>
-              <button className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+              <button type="button" className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                 مستندات
               </button>
             </div>

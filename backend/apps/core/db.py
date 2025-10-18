@@ -8,8 +8,12 @@ from sqlalchemy.orm import sessionmaker
 
 from .config import settings
 
-# Convert postgres:// to postgresql+asyncpg://
-database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+# Convert postgresql:// to postgresql+asyncpg:// if needed
+database_url = settings.DATABASE_URL
+if database_url.startswith("postgresql://") and "+asyncpg" not in database_url:
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+elif database_url.startswith("postgres://") and "+asyncpg" not in database_url:
+    database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
 
 # Create async engine
 engine = create_async_engine(
@@ -45,5 +49,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()
