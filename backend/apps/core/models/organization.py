@@ -24,6 +24,9 @@ class Organization(Base):
     memberships: Mapped[list["Membership"]] = relationship(  # noqa: F821
         "Membership", back_populates="organization", cascade="all, delete-orphan"
     )
+    datasources: Mapped[list["DataSource"]] = relationship(  # noqa: F821
+        "DataSource", back_populates="organization", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Organization(id={self.id}, name={self.name}, plan={self.plan})>"
