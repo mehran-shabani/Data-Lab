@@ -1,3 +1,5 @@
-"""Connectors module - reserved for future prompts."""
+"""Connectors module for managing DataSources."""
 
-# External service connectors will be added in future prompts
+from . import router
+
+__all__ = ["router"]

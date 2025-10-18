@@ -426,6 +426,123 @@ farda-mcp/
 
 ---
 
+## ADR-0010: انتخاب Envelope Encryption برای مدیریت اسرار
+
+**تاریخ**: 2025-10-18
+
+**وضعیت**: پذیرفته شده ✅
+
+### زمینه
+
+نیاز به ذخیره امن اعتبارنامه‌های DataSource (رمز عبور، API Keys، توکن‌ها) در دیتابیس به گونه‌ای که:
+* در صورت نشت دیتابیس، اسرار در معرض خطر نباشند
+* امکان key rotation وجود داشته باشد
+* عملکرد مناسب برای read/write مکرر
+* قابل استفاده با KMS/Vault در آینده
+
+### گزینه‌های بررسی شده
+
+1. **متن واضح (Plaintext)** ❌
+   * ✅ ساده
+   * ❌ بسیار ناامن
+   * ❌ نشت DB = نشت اسرار
+   * ❌ غیرقابل قبول
+
+2. **رمزنگاری مستقیم با کلید واحد**
+   * ✅ ساده
+   * ❌ تغییر کلید = بازرمز تمام داده‌ها
+   * ❌ کلید باید در application memory باشد
+   * ❌ دشوار برای مقیاس
+
+3. **Envelope Encryption** ⭐
+   * ✅ تفکیک Data Key و Master Key
+   * ✅ Key rotation آسان
+   * ✅ سازگار با KMS (AWS/GCP/Azure)
+   * ✅ Performance بهتر
+   * ✅ الگوی صنعتی استاندارد
+   * ❌ پیچیدگی بیشتر
+
+4. **استفاده مستقیم از KMS**
+   * ✅ بسیار امن
+   * ❌ هزینه بالا برای MVP
+   * ❌ latency شبکه
+   * ❌ وابستگی به cloud provider
+
+### تصمیم
+
+**Envelope Encryption** انتخاب شد چون:
+
+1. **امنیت**: هر DataSource کلید مستقل دارد (Data Key)
+2. **Performance**: رمزنگاری محلی با Data Key، بدون فراخوانی KMS
+3. **Flexibility**: Master Key می‌تواند از ENV یا Vault/KMS باشد
+4. **Key Rotation**: تغییر Master Key بدون بازرمز تمام داده‌ها
+5. **مسیر مهاجرت**: در MVP از ENV، در V1 به KMS مهاجرت
+
+### معماری پیاده‌سازی
+
+```
+[Connection Config] --encrypt--> [Data Key] --encrypt--> [Master Key]
+       (JSON)                     (32 bytes)              (ENV/KMS)
+         |                            |                        |
+         v                            v                        v
+    [config_enc]                [data_key_enc]           [SECRETS_MASTER_KEY]
+   (در DB ذخیره)               (در DB ذخیره)          (از ENV/Vault خوانده)
+```
+
+#### فلوی رمزنگاری:
+1. تولید Data Key تصادفی (32 bytes)
+2. رمزنگاری Connection Config با Data Key (AES-GCM)
+3. رمزنگاری Data Key با Master Key (از ENV)
+4. ذخیره `connection_config_enc` و `data_key_enc` در DB
+
+#### فلوی بازرمزی:
+1. خواندن `data_key_enc` از DB
+2. بازرمزی Data Key با Master Key
+3. بازرمزی Connection Config با Data Key
+4. استفاده از Config در تست اتصال
+
+### پیامدها
+
+**مثبت:**
+* امنیت بالا: نشت DB بدون Master Key بی‌خطر است
+* جداسازی مسئولیت: هر DS کلید مستقل دارد
+* مقیاس‌پذیری: بدون نیاز به KMS call برای هر عملیات
+* آینده‌پذیر: آماده برای مهاجرت به Vault/KMS
+* الگوی استاندارد: مورد استفاده AWS, GCP, Azure
+
+**منفی:**
+* پیچیدگی بیشتر نسبت به رمزنگاری ساده
+* نیاز به مدیریت احتیاطی Master Key
+* در MVP: Master Key در ENV (نه ایده‌آل برای production)
+
+### برنامه مهاجرت (V1)
+
+```python
+# MVP (فعلی)
+master_key = os.getenv("SECRETS_MASTER_KEY")
+
+# V1 (آینده)
+master_key = vault_client.get_secret("farda-mcp/master-key")
+# یا
+master_key = aws_kms.decrypt(encrypted_master_key_blob)
+```
+
+### اصول امنیتی
+
+1. ✅ Master Key هرگز در لاگ نمایش داده نمی‌شود
+2. ✅ هیچ endpoint اسرار را برنمی‌گرداند
+3. ✅ فیلدهای حساس در UI ماسک شده (`•••••`)
+4. ✅ تست اتصال با Data Key محلی، بدون نمایش اسرار
+5. ✅ در production: Master Key از Vault/KMS
+
+### منابع
+
+* [AWS KMS Envelope Encryption](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#enveloping)
+* [GCP Encryption at Rest](https://cloud.google.com/docs/security/encryption/default-encryption)
+* [HashiCorp Vault Transit Engine](https://www.vaultproject.io/docs/secrets/transit)
+
+---
+
 ## Template برای ADR های آینده
 
 ```markdown

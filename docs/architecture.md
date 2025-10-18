@@ -144,6 +144,64 @@ web/
 کاربر ← Cookie/LocalStorage ← ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
 ```
 
+### مدیریت DataSource و Envelope Encryption (پرامپت ۳)
+
+```mermaid
+graph TB
+    A[کاربر] -->|ایجاد DataSource| B[FastAPI Router]
+    B --> C{احراز هویت و RBAC}
+    C -->|مجاز| D[DataSource Service]
+    C -->|غیرمجاز| E[403 Forbidden]
+    
+    D --> F[تولید Data Key]
+    F --> G[رمزنگاری Connection Config با Data Key]
+    G --> H[رمزنگاری Data Key با Master Key]
+    H --> I[ذخیره در DB]
+    I --> J[Encrypted: connection_config_enc + data_key_enc]
+    
+    K[بارگذاری DataSource] --> L[بازرمزی Data Key با Master Key]
+    L --> M[بازرمزی Connection Config با Data Key]
+    M --> N[استفاده از Plaintext Config]
+    
+    O[تست اتصال] --> N
+    N -->|Postgres| P[psycopg.connect]
+    N -->|REST| Q[httpx.get/head]
+    P --> R[نتیجه: ok/fail]
+    Q --> R
+```
+
+#### فلو Envelope Encryption
+
+**۱. ایجاد DataSource:**
+```
+ورودی از کاربر → JSON config
+   ↓
+تولید Data Key (32 bytes random)
+   ↓
+رمزنگاری config با Data Key (AES-GCM)
+   ↓
+رمزنگاری Data Key با Master Key (از ENV)
+   ↓
+ذخیره در DB: connection_config_enc, data_key_enc
+```
+
+**۲. بارگذاری و استفاده:**
+```
+خواندن از DB: connection_config_enc, data_key_enc
+   ↓
+بازرمزی Data Key با Master Key
+   ↓
+بازرمزی connection_config با Data Key
+   ↓
+استفاده از config در تست اتصال یا کانکتور
+```
+
+**امنیت:**
+* Master Key از متغیر محیطی `SECRETS_MASTER_KEY` خوانده می‌شود
+* هیچ Endpoint یا لاگ اسرار را نمایش نمی‌دهد
+* در MVP: Master Key از ENV، در V1: Vault/KMS
+* فیلدهای حساس در UI ماسک شده (`•••••`)
+
 ## مرزبندی و جداسازی (Boundaries)
 
 ### مرزهای ماژولی

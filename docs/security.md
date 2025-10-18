@@ -269,23 +269,90 @@ hashed = pwd_context.hash(plain_password)
 is_valid = pwd_context.verify(plain_password, hashed)
 ```
 
-### Sensitive Data Encryption
+### Sensitive Data Encryption with Envelope Encryption (پرامپت ۳)
 
-برای داده‌های حساس در دیتابیس (پرامپت‌های بعدی):
+سیستم از الگوی **Envelope Encryption** برای نگهداری امن اعتبارنامه‌های DataSource استفاده می‌کند:
+
+#### معماری Envelope Encryption
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Connection Config (plaintext)                           │
+│  {username, password, host, ...}                         │
+└────────────────────┬─────────────────────────────────────┘
+                     │ AES-GCM
+                     ▼
+┌──────────────────────────────────────────────────────────┐
+│  Data Key (32 bytes random)                              │
+└────────────────────┬─────────────────────────────────────┘
+                     │
+        ┌────────────┴─────────────┐
+        │                          │
+        ▼ Encrypt                  ▼ Encrypt with Master Key
+┌──────────────────┐         ┌─────────────────────────────┐
+│ config_enc       │         │ data_key_enc                │
+│ (stored in DB)   │         │ (stored in DB)              │
+└──────────────────┘         └─────────────────────────────┘
+```
+
+#### پیاده‌سازی
 
 ```python
-from cryptography.fernet import Fernet
+# backend/apps/core/crypto.py
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+import os
 
-# در production از Vault/KMS استفاده کنید
-key = Fernet.generate_key()
-cipher = Fernet(key)
+def generate_data_key() -> bytes:
+    """Generate random 32-byte data key."""
+    return os.urandom(32)
 
-# Encrypt
-encrypted = cipher.encrypt(b"sensitive data")
+def encrypt_with_data_key(plaintext_data: dict, data_key: bytes) -> bytes:
+    """Encrypt data with AES-GCM using data key."""
+    nonce = os.urandom(12)
+    aesgcm = AESGCM(data_key)
+    ciphertext_with_tag = aesgcm.encrypt(nonce, plaintext_bytes, None)
+    return nonce + ciphertext_with_tag  # [nonce|tag|ciphertext]
 
-# Decrypt
-decrypted = cipher.decrypt(encrypted)
+def wrap_key_with_master(data_key: bytes, master_key: bytes) -> bytes:
+    """Encrypt data key with master key."""
+    nonce = os.urandom(12)
+    aesgcm = AESGCM(master_key)
+    return nonce + aesgcm.encrypt(nonce, data_key, None)
 ```
+
+#### Master Key Management
+
+**MVP (فعلی):**
+* Master Key از متغیر محیطی `SECRETS_MASTER_KEY` خوانده می‌شود
+* باید ۳۲ بایت (۲۵۶ بیت) باشد
+* می‌تواند به صورت hex (۶۴ کاراکتر) یا base64 ارائه شود
+* در production باید از Vault یا AWS Secrets Manager خوانده شود
+
+```bash
+# .env
+SECRETS_MASTER_KEY=0123456789abcdef...  # 64 hex chars
+```
+
+**V1 (برنامه آتی):**
+* یکپارچه‌سازی با HashiCorp Vault
+* یا استفاده از AWS KMS / Azure Key Vault
+* Automatic key rotation
+* Audit logging برای دسترسی به کلیدها
+
+#### اصول امنیتی
+
+1. **No Secrets in Logs**: هیچ لاگ یا endpoint اسرار را نمایش نمی‌دهد
+2. **Masked in UI**: فیلدهای حساس در UI به صورت `•••••` نمایش داده می‌شوند
+3. **No Secrets in API**: هیچ endpoint اسرار را در پاسخ برنمی‌گرداند
+4. **Encryption at Rest**: تمام اعتبارنامه‌ها رمزشده در DB ذخیره می‌شوند
+5. **Key Separation**: Data Key جدا از Master Key نگهداری می‌شود
+
+#### مزایای Envelope Encryption
+
+* **Performance**: رمزگشایی سریع با Data Key محلی
+* **Key Rotation**: تغییر Master Key بدون بازرمز تمام داده‌ها
+* **Scalability**: هر DataSource کلید مستقل دارد
+* **Flexibility**: امکان استفاده از KMS‌های مختلف در آینده
 
 ## امنیت شبکه
 

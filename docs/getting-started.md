@@ -1,5 +1,7 @@
 # راهنمای شروع سریع Farda MCP
 
+> **نکته**: این راهنما بعد از پیاده‌سازی پرامپت‌های ۱ تا ۳ نوشته شده است و شامل احراز هویت، چندمستأجری، و مدیریت DataSource است.
+
 این راهنما شما را گام‌به‌گام در نصب و راه‌اندازی محلی Farda MCP همراهی می‌کند.
 
 ## پیش‌نیازها
@@ -79,8 +81,9 @@ pip install -e ".[dev]"
 # کپی فایل محیطی
 cp .env.example .env
 
-# ویرایش .env و تنظیم DATABASE_URL
+# ویرایش .env و تنظیم DATABASE_URL و SECRETS_MASTER_KEY
 # DATABASE_URL=postgresql://postgres:postgres@localhost:5432/farda_mcp
+# SECRETS_MASTER_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
 # اجرای migration ها
 alembic upgrade head
@@ -398,6 +401,83 @@ NEXT_PUBLIC_APP_NAME=Farda MCP
 NEXT_PUBLIC_APP_VERSION=0.1.0
 ```
 
+## استفاده از DataSource (پرامپت ۳)
+
+### ایجاد DataSource از طریق API
+
+```bash
+# ورود و دریافت توکن
+curl -X POST http://localhost:8000/auth/dev/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "org_name": "Acme Corp"
+  }'
+
+# ذخیره توکن
+export TOKEN="your-jwt-token-here"
+
+# ایجاد PostgreSQL DataSource
+curl -X POST http://localhost:8000/api/orgs/{org_id}/datasources/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production DB",
+    "type": "POSTGRES",
+    "host": "db.example.com",
+    "port": 5432,
+    "database": "mydb",
+    "username": "dbuser",
+    "password": "secret123"
+  }'
+
+# تست اتصال
+curl -X POST http://localhost:8000/api/orgs/{org_id}/datasources/check \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "POSTGRES",
+    "host": "db.example.com",
+    "port": 5432,
+    "database": "mydb",
+    "username": "dbuser",
+    "password": "secret123"
+  }'
+
+# لیست DataSource‌ها
+curl -X GET http://localhost:8000/api/orgs/{org_id}/datasources/ \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### ایجاد REST DataSource
+
+```bash
+# ایجاد REST API DataSource با API Key
+curl -X POST http://localhost:8000/api/orgs/{org_id}/datasources/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "External API",
+    "type": "REST",
+    "base_url": "https://api.example.com",
+    "auth_type": "API_KEY",
+    "api_key": "secret-api-key-123",
+    "headers": {
+      "X-Custom-Header": "value"
+    }
+  }'
+```
+
+### استفاده از UI
+
+1. وارد داشبورد شوید: http://localhost:3000/dashboard
+2. به بخش "منابع داده" بروید: http://localhost:3000/dashboard/datasources
+3. روی "منبع داده جدید +" کلیک کنید
+4. فرم را پر کنید و "تست اتصال" را بزنید
+5. در صورت موفقیت، "ایجاد منبع داده" را بزنید
+
+**نکته**: فیلدهای حساس (رمز عبور، API Key) به صورت امن با Envelope Encryption ذخیره می‌شوند و در UI ماسک شده نمایش داده می‌شوند (`•••••`).
+
 ## مراحل بعدی
 
 پس از راه‌اندازی موفق:
@@ -405,7 +485,7 @@ NEXT_PUBLIC_APP_VERSION=0.1.0
 1. مطالعه [معماری سیستم](./architecture.md)
 2. مطالعه [اصول امنیتی](./security.md)
 3. مطالعه [تصمیمات معماری](./decisions.md)
-4. شروع توسعه با پرامپت ۲ (احراز هویت و RBAC)
+4. آزمایش مدیریت DataSource و تست اتصال
 
 ## دریافت کمک
 

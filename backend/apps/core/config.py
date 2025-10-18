@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     OIDC_CLIENT_SECRET: str | None = Field(default=None)
     OIDC_REDIRECT_URI: str | None = Field(default=None)
 
+    # Secrets Management (Envelope Encryption)
+    SECRETS_MASTER_KEY: str | None = Field(default=None)
+
     @field_validator("OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URI")
     @classmethod
     def validate_oidc_in_prod(cls, v, info):

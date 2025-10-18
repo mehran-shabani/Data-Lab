@@ -3,6 +3,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.connectors import router as connectors_router
+
 from .auth import router as auth_router
 from .config import settings
 from .routers import health
@@ -29,6 +31,7 @@ def create_app() -> FastAPI:
     # Register routers
     app.include_router(health.router, tags=["health"])
     app.include_router(auth_router)
+    app.include_router(connectors_router.router, prefix="/api")
 
     return app
 
