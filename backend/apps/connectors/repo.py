@@ -1,12 +1,10 @@
 """Repository for DataSource CRUD operations."""
 
 import logging
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from apps.core.models import DataSource, DataSourceType
 

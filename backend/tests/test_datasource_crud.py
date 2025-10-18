@@ -6,7 +6,7 @@ import pytest
 from httpx import AsyncClient
 
 from apps.core import app as fastapi_app
-from apps.core.models import DataSource, Membership, Organization, User
+from apps.core.models import Membership, Organization, User
 from apps.core.security import create_access_token
 
 

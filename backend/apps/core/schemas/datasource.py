@@ -1,10 +1,10 @@
 """Pydantic schemas for DataSource management."""
 
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 # ===== Base Schemas =====

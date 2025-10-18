@@ -1,8 +1,9 @@
 """Tests for DataSource connectivity checks."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from apps.core import app as fastapi_app
 from apps.core.models import Membership, Organization, User
