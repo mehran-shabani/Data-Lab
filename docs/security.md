@@ -75,74 +75,131 @@ SECRET_KEY=${VAULT_SECRET}
 
 ## احراز هویت (Authentication)
 
-### نسخه فعلی (MVP)
+### نسخه فعلی (پرامپت ۲ - پیاده‌سازی شده)
 
-در حال حاضر احراز هویت ساده‌ای پیاده‌سازی شده است که در **پرامپت ۲** تکمیل خواهد شد.
+سیستم احراز هویت کامل با JWT و چندمستأجری پیاده‌سازی شده است:
+
+#### JWT Tokens
 
 ```python
 # backend/apps/core/security.py
-# Placeholder implementation
-def create_access_token(data: dict) -> str:
-    # Will be implemented in prompt 2
-    return "placeholder-token"
+from jose import jwt
+from datetime import datetime, timedelta, UTC
+
+def create_access_token(claims: dict, ttl_min: int = None) -> str:
+    """Create JWT access token with HS256."""
+    if ttl_min is None:
+        ttl_min = settings.AUTH_ACCESS_TTL_MIN
+    
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(minutes=ttl_min)
+    
+    to_encode = claims.copy()
+    to_encode.update({
+        "iat": int(now.timestamp()),
+        "exp": int(expires_at.timestamp()),
+    })
+    
+    return jwt.encode(to_encode, settings.AUTH_SECRET, algorithm="HS256")
 ```
 
-### پرامپت ۲ (آینده نزدیک)
+#### Token Claims Structure
 
-احراز هویت کامل با:
+```json
+{
+  "sub": "user-uuid",
+  "email": "user@example.com",
+  "org_id": "organization-uuid",
+  "roles": ["ORG_ADMIN"],
+  "iat": 1234567890,
+  "exp": 1234571490
+}
+```
 
-* **JWT Tokens**: برای stateless authentication
-* **OIDC Support**: برای SSO
-* **Refresh Tokens**: برای امنیت بیشتر
-* **Password Hashing**: با bcrypt
-* **MFA**: Two-factor authentication (اختیاری)
+#### Dev Login (محیط‌های local/ci)
+
+برای سهولت توسعه، یک endpoint ساده ورود وجود دارد:
 
 ```python
-# نمونه (پرامپت 2)
-from jose import jwt
-from datetime import datetime, timedelta
+# POST /auth/dev/login
+{
+  "email": "user@example.com",
+  "org_name": "Acme Corp"
+}
+```
 
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+این endpoint فقط در `APP_ENV=local` یا `APP_ENV=ci` فعال است و در production غیرفعال می‌شود.
+
+#### OIDC Support (آماده برای production)
+
+اسکلت OIDC برای SSO آماده است:
+
+* `GET /auth/oidc/.well-known` - دریافت تنظیمات OIDC
+* `POST /auth/oidc/exchange` - مبادله authorization code
+
+در production، با تنظیم متغیرهای زیر فعال می‌شود:
+
+```bash
+OIDC_ISSUER=https://your-idp.com
+OIDC_CLIENT_ID=your-client-id
+OIDC_CLIENT_SECRET=your-secret
+OIDC_REDIRECT_URI=https://your-app.com/auth/callback
 ```
 
 ## مجوزدهی (Authorization)
 
 ### RBAC (Role-Based Access Control)
 
-در **پرامپت ۲** پیاده‌سازی خواهد شد:
+سیستم RBAC پایه پیاده‌سازی شده است:
 
 ```
-User
-  ├─ Roles (many-to-many)
-  │   ├─ Admin
-  │   ├─ Tenant Admin
-  │   ├─ User
-  │   └─ Guest
-  └─ Permissions (via Roles)
-      ├─ tenant.create
-      ├─ tenant.read
-      ├─ tenant.update
-      └─ tenant.delete
+User → Membership → Organization
+        ↓
+      Roles[]
 ```
 
-### Resource-level Permissions
+#### مدل داده
 
 ```python
-# نمونه (پرامپت 2)
-@router.get("/tenants/{tenant_id}")
-async def get_tenant(
-    tenant_id: str,
-    current_user: User = Depends(require_permission("tenant.read"))
-):
-    # بررسی دسترسی کاربر به tenant
-    if not current_user.has_access_to_tenant(tenant_id):
-        raise HTTPException(403, "Access denied")
-    return tenant
+class Membership(Base):
+    """رابطه کاربر-سازمان با نقش‌ها."""
+    user_id: UUID
+    org_id: UUID
+    roles: list[str]  # ["ORG_ADMIN", "ORG_MEMBER"]
 ```
+
+#### استفاده از Guards
+
+```python
+from apps.core.deps import get_current_user, require_roles, org_guard
+
+# دریافت کاربر جاری
+@router.get("/me")
+async def get_me(current_user: CurrentUser = Depends(get_current_user)):
+    return current_user
+
+# بررسی نقش
+@router.delete("/admin/resource")
+async def delete_resource(
+    _: CurrentUser = Depends(require_roles("ORG_ADMIN"))
+):
+    # فقط ORG_ADMIN دسترسی دارد
+    pass
+
+# بررسی دسترسی به سازمان
+@router.get("/orgs/{org_id}/whoami")
+async def whoami(
+    org_id: UUID,
+    current_user: CurrentUser = Depends(org_guard())
+):
+    # فقط اگر current_user.org_id == org_id
+    return current_user
+```
+
+### نقش‌های پیش‌فرض
+
+* `ORG_ADMIN` - مدیر سازمان، دسترسی کامل به منابع سازمان
+* `ORG_MEMBER` - عضو معمولی (نقش پیش‌فرض)
 
 ## حفاظت از داده‌ها
 
@@ -280,34 +337,50 @@ location /api/ {
 
 ## چندمستأجری (Multi-tenancy) امن
 
+### معماری چندمستأجری
+
+سیستم از معماری org-scoped استفاده می‌کند:
+
+```
+Organization (tenant)
+  ↓
+Membership
+  ├─ User
+  └─ Roles[]
+```
+
 ### جداسازی داده‌ها
 
-در **پرامپت ۲** پیاده‌سازی خواهد شد:
+جداسازی در سطح application با استفاده از `org_guard`:
 
 ```python
-# هر query باید tenant_id را بررسی کند
-async def get_user_items(
-    user: User,
-    db: AsyncSession
+@router.get("/orgs/{org_id}/resources")
+async def get_resources(
+    org_id: UUID,
+    current_user: CurrentUser = Depends(org_guard()),
+    db: AsyncSession = Depends(get_db)
 ):
+    # org_guard اطمینان می‌دهد current_user.org_id == org_id
+    
+    # حالا می‌توانیم داده‌های این سازمان را برگردانیم
     return await db.execute(
-        select(Item)
-        .where(Item.tenant_id == user.tenant_id)  # ✅ فیلتر tenant
-        .where(Item.user_id == user.id)
+        select(Resource).where(Resource.org_id == org_id)
     )
 ```
 
 ### Tenant Isolation
 
 ```
-Tenant A         Tenant B
-  ↓                ↓
-Data A          Data B
-  ↓                ↓
-[Row-level Security Filter]
-  ↓
-PostgreSQL
+Request → JWT (org_id) → org_guard() → Database Query
+                ↓                            ↓
+         current_user.org_id        WHERE org_id = ...
 ```
+
+**قوانین طلایی:**
+
+1. همیشه از `org_guard()` برای endpoint‌های org-scoped استفاده کنید
+2. هرگز به `org_id` از query parameters اعتماد نکنید
+3. همیشه `org_id` را از JWT token استخراج کنید
 
 ## Audit Logging
 

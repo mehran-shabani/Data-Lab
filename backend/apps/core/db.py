@@ -3,8 +3,7 @@
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
 
@@ -29,8 +28,12 @@ AsyncSessionLocal = sessionmaker(
     expire_on_commit=False,
 )
 
+
 # Base class for models
-Base = declarative_base()
+class Base(DeclarativeBase):
+    """Base class for all database models."""
+
+    pass
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

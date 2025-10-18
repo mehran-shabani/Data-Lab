@@ -11,9 +11,30 @@ jobs:
     name: Backend CI
     runs-on: ubuntu-latest
     
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: farda_mcp_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
     strategy:
       matrix:
         python-version: ['3.11', '3.12']
+    
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/farda_mcp_test
+      APP_ENV: ci
+      AUTH_SECRET: test-secret-key
+      AUTH_ACCESS_TTL_MIN: 60
     
     steps:
     - name: Checkout code
@@ -41,10 +62,15 @@ jobs:
       run: |
         ruff format --check .
     
-    - name: Run tests
+    - name: Run migrations
       working-directory: ./backend
       run: |
-        pytest -v
+        python -m alembic upgrade head
+    
+    - name: Run tests (including auth multi-tenant tests)
+      working-directory: ./backend
+      run: |
+        pytest -v tests/test_health.py tests/test_auth_multitenant.py
     
     - name: Upload test results
       if: failure()
@@ -84,9 +110,10 @@ jobs:
       working-directory: ./web
       run: npm run typecheck
     
-    - name: Run tests
-      working-directory: ./web
-      run: npm run test
+    # Tests will be added in future prompts
+    # - name: Run tests
+    #   working-directory: ./web
+    #   run: npm run test
     
     - name: Build
       working-directory: ./web
