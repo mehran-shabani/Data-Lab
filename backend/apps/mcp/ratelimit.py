@@ -5,12 +5,10 @@ In production, this should be moved to Redis for distributed rate limiting.
 """
 
 import time
-from collections import defaultdict
 from dataclasses import dataclass
 from threading import Lock
 from typing import TypeAlias
 from uuid import UUID
-
 
 RateLimitKey: TypeAlias = tuple[UUID, UUID]  # (org_id, tool_id)
 

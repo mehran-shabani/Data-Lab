@@ -60,9 +60,7 @@ def auth_headers(admin_token):
 
 
 @pytest.mark.asyncio
-async def test_create_mcp_server(
-    override_get_db, auth_headers, test_org, test_membership
-):
+async def test_create_mcp_server(override_get_db, auth_headers, test_org, test_membership):
     """Test creating an MCP server."""
     async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
         payload = {"name": "Test MCP Server"}
@@ -109,9 +107,7 @@ async def test_create_mcp_server_duplicate_name(
 
 
 @pytest.mark.asyncio
-async def test_list_mcp_servers(
-    override_get_db, auth_headers, test_org, test_membership
-):
+async def test_list_mcp_servers(override_get_db, auth_headers, test_org, test_membership):
     """Test listing MCP servers."""
     async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
         # Create a server first
@@ -137,9 +133,7 @@ async def test_list_mcp_servers(
 
 
 @pytest.mark.asyncio
-async def test_get_mcp_server(
-    override_get_db, auth_headers, test_org, test_membership
-):
+async def test_get_mcp_server(override_get_db, auth_headers, test_org, test_membership):
     """Test getting a specific MCP server."""
     async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
         # Create a server first
@@ -166,9 +160,7 @@ async def test_get_mcp_server(
 
 
 @pytest.mark.asyncio
-async def test_rotate_mcp_server_key(
-    override_get_db, auth_headers, test_org, test_membership
-):
+async def test_rotate_mcp_server_key(override_get_db, auth_headers, test_org, test_membership):
     """Test rotating MCP server API key."""
     async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
         # Create a server first
@@ -196,9 +188,7 @@ async def test_rotate_mcp_server_key(
 
 
 @pytest.mark.asyncio
-async def test_enable_mcp_server(
-    override_get_db, auth_headers, test_org, test_membership
-):
+async def test_enable_mcp_server(override_get_db, auth_headers, test_org, test_membership):
     """Test enabling MCP server."""
     async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
         # Create a server
@@ -228,9 +218,7 @@ async def test_enable_mcp_server(
 
 
 @pytest.mark.asyncio
-async def test_disable_mcp_server(
-    override_get_db, auth_headers, test_org, test_membership
-):
+async def test_disable_mcp_server(override_get_db, auth_headers, test_org, test_membership):
     """Test disabling MCP server."""
     async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
         # Create a server
@@ -254,9 +242,7 @@ async def test_disable_mcp_server(
 
 
 @pytest.mark.asyncio
-async def test_mcp_server_requires_admin_role(
-    override_get_db, test_org
-):
+async def test_mcp_server_requires_admin_role(override_get_db, test_org):
     """Test that MCP server operations require ORG_ADMIN role."""
     # Create a user with DEVELOPER role
     from apps.core import app as app

@@ -32,7 +32,9 @@ class MCPServer(Base):
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[MCPServerStatus] = mapped_column(
-        Enum(MCPServerStatus, name="mcp_server_status"), default=MCPServerStatus.ENABLED, nullable=False
+        Enum(MCPServerStatus, name="mcp_server_status"),
+        default=MCPServerStatus.ENABLED,
+        nullable=False,
     )
     api_key_hash: Mapped[bytes] = mapped_column(
         LargeBinary, nullable=False, comment="Hashed API key (bcrypt)"

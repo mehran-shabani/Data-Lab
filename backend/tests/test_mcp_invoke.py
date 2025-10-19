@@ -1,8 +1,9 @@
 """Tests for MCP Tool invocation with policies and rate limiting."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
 
 from apps.core import app as fastapi_app
 from apps.core.models import (
@@ -251,7 +252,7 @@ async def test_invoke_tool_rate_limit_exceeded(
                 json=payload,
                 headers=auth_headers,
             )
-            assert response.status_code == 200, f"Request {i+1} should succeed"
+            assert response.status_code == 200, f"Request {i + 1} should succeed"
 
         # Next request should be rate limited
         response = await client.post(
@@ -287,9 +288,7 @@ async def test_invoke_disabled_tool(
 
 
 @pytest.mark.asyncio
-async def test_invoke_nonexistent_tool(
-    override_get_db, auth_headers, test_org, test_membership
-):
+async def test_invoke_nonexistent_tool(override_get_db, auth_headers, test_org, test_membership):
     """Test invocation of non-existent tool."""
     from uuid import uuid4
 

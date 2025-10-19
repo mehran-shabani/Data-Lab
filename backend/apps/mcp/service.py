@@ -1,6 +1,5 @@
 """Service layer for MCP Manager with tool registry, invocation, and policies."""
 
-import json
 import logging
 import secrets
 import time
@@ -114,9 +113,7 @@ class MCPService:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list_tools(
-        self, org_id: UUID, skip: int = 0, limit: int = 100
-    ) -> list[Tool]:
+    async def list_tools(self, org_id: UUID, skip: int = 0, limit: int = 100) -> list[Tool]:
         """List all tools for organization.
 
         Args:
@@ -131,9 +128,7 @@ class MCPService:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def update_tool(
-        self, org_id: UUID, tool_id: UUID, payload: ToolUpdate
-    ) -> Tool:
+    async def update_tool(self, org_id: UUID, tool_id: UUID, payload: ToolUpdate) -> Tool:
         """Update a tool.
 
         Args:
@@ -218,9 +213,7 @@ class MCPService:
             ValueError: If server name already exists
         """
         # Check if name already exists
-        stmt = select(MCPServer).where(
-            MCPServer.org_id == org_id, MCPServer.name == payload.name
-        )
+        stmt = select(MCPServer).where(MCPServer.org_id == org_id, MCPServer.name == payload.name)
         result = await self.session.execute(stmt)
         if result.scalar_one_or_none():
             raise ValueError(f"MCP Server with name '{payload.name}' already exists")
@@ -230,9 +223,7 @@ class MCPService:
         api_key_hash = bcrypt.hash(plain_api_key).encode("utf-8")
 
         # Create server
-        server = MCPServer(
-            org_id=org_id, name=payload.name, api_key_hash=api_key_hash
-        )
+        server = MCPServer(org_id=org_id, name=payload.name, api_key_hash=api_key_hash)
         self.session.add(server)
         await self.session.commit()
         await self.session.refresh(server)
@@ -249,9 +240,7 @@ class MCPService:
         Returns:
             MCPServer instance or None
         """
-        stmt = select(MCPServer).where(
-            MCPServer.org_id == org_id, MCPServer.id == server_id
-        )
+        stmt = select(MCPServer).where(MCPServer.org_id == org_id, MCPServer.id == server_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -268,15 +257,11 @@ class MCPService:
         Returns:
             List of MCPServer instances
         """
-        stmt = (
-            select(MCPServer).where(MCPServer.org_id == org_id).offset(skip).limit(limit)
-        )
+        stmt = select(MCPServer).where(MCPServer.org_id == org_id).offset(skip).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def rotate_mcp_api_key(
-        self, org_id: UUID, server_id: UUID
-    ) -> tuple[MCPServer, str]:
+    async def rotate_mcp_api_key(self, org_id: UUID, server_id: UUID) -> tuple[MCPServer, str]:
         """Rotate API key for MCP server.
 
         Args:
@@ -304,9 +289,7 @@ class MCPService:
         logger.info(f"Rotated API key for MCP Server {server_id} in org {org_id}")
         return server, plain_api_key
 
-    async def toggle_mcp_server(
-        self, org_id: UUID, server_id: UUID, enable: bool
-    ) -> MCPServer:
+    async def toggle_mcp_server(self, org_id: UUID, server_id: UUID, enable: bool) -> MCPServer:
         """Enable or disable MCP server.
 
         Args:
@@ -326,9 +309,7 @@ class MCPService:
 
         from apps.core.models.mcp_server import MCPServerStatus
 
-        server.status = (
-            MCPServerStatus.ENABLED if enable else MCPServerStatus.DISABLED
-        )
+        server.status = MCPServerStatus.ENABLED if enable else MCPServerStatus.DISABLED
         await self.session.commit()
         await self.session.refresh(server)
         return server
@@ -374,9 +355,7 @@ class MCPService:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list_policies(
-        self, org_id: UUID, skip: int = 0, limit: int = 100
-    ) -> list[Policy]:
+    async def list_policies(self, org_id: UUID, skip: int = 0, limit: int = 100) -> list[Policy]:
         """List all policies for organization.
 
         Args:
@@ -391,9 +370,7 @@ class MCPService:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def update_policy(
-        self, org_id: UUID, policy_id: UUID, payload: PolicyUpdate
-    ) -> Policy:
+    async def update_policy(self, org_id: UUID, policy_id: UUID, payload: PolicyUpdate) -> Policy:
         """Update a policy.
 
         Args:
@@ -494,9 +471,7 @@ class MCPService:
 
             # Step 2: Check policies
             user_membership = await self._get_user_membership(org_id, user_id)
-            policy_result = await self._check_policies(
-                org_id, tool_id, user_membership
-            )
+            policy_result = await self._check_policies(org_id, tool_id, user_membership)
             if not policy_result["allowed"]:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -517,9 +492,7 @@ class MCPService:
             # Step 5: Apply field masking
             masked = False
             if policy_result.get("field_masks"):
-                result_data = self._apply_field_masks(
-                    result_data, policy_result["field_masks"]
-                )
+                result_data = self._apply_field_masks(result_data, policy_result["field_masks"])
                 masked = True
 
             # Step 6: Audit (simple logging for MVP)
@@ -529,9 +502,7 @@ class MCPService:
                 f"tool_id={tool_id}, user_id={user_id}, latency_ms={latency_ms}, ok=True"
             )
 
-            return InvokeOut(
-                ok=True, data=result_data, masked=masked, trace_id=trace_id
-            )
+            return InvokeOut(ok=True, data=result_data, masked=masked, trace_id=trace_id)
 
         except HTTPException:
             raise
@@ -562,17 +533,11 @@ class MCPService:
             required = ["method", "path"]
             missing = [f for f in required if f not in exec_config]
             if missing:
-                raise ValueError(
-                    f"REST_CALL requires {missing} in exec_config"
-                )
+                raise ValueError(f"REST_CALL requires {missing} in exec_config")
 
-    async def _get_user_membership(
-        self, org_id: UUID, user_id: UUID
-    ) -> Membership | None:
+    async def _get_user_membership(self, org_id: UUID, user_id: UUID) -> Membership | None:
         """Get user membership in organization."""
-        stmt = select(Membership).where(
-            Membership.org_id == org_id, Membership.user_id == user_id
-        )
+        stmt = select(Membership).where(Membership.org_id == org_id, Membership.user_id == user_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -617,9 +582,7 @@ class MCPService:
 
         return {"allowed": True, "reason": "Allowed by policy", "field_masks": field_masks}
 
-    def _policy_conditions_match(
-        self, policy: Policy, membership: Membership | None
-    ) -> bool:
+    def _policy_conditions_match(self, policy: Policy, membership: Membership | None) -> bool:
         """Check if policy conditions match user membership.
 
         Args:
@@ -663,9 +626,7 @@ class MCPService:
         else:
             raise ValueError(f"Unsupported tool type: {tool.type}")
 
-    async def _execute_postgres_query(
-        self, tool: Tool, params: dict[str, Any]
-    ) -> Any:
+    async def _execute_postgres_query(self, tool: Tool, params: dict[str, Any]) -> Any:
         """Execute PostgreSQL query with parameterized template.
 
         Args:
@@ -680,9 +641,7 @@ class MCPService:
             raise ValueError("Tool requires datasource_id for POSTGRES_QUERY")
 
         ds_service = DataSourceService(self.session)
-        config = await ds_service.load_connection_config(
-            tool.org_id, tool.datasource_id
-        )
+        config = await ds_service.load_connection_config(tool.org_id, tool.datasource_id)
 
         # Get query template from exec_config
         query_template = tool.exec_config.get("query_template")
@@ -715,9 +674,7 @@ class MCPService:
             raise ValueError("Tool requires datasource_id for REST_CALL")
 
         ds_service = DataSourceService(self.session)
-        config = await ds_service.load_connection_config(
-            tool.org_id, tool.datasource_id
-        )
+        config = await ds_service.load_connection_config(tool.org_id, tool.datasource_id)
 
         # Build request
         method = tool.exec_config.get("method", "GET")
@@ -754,9 +711,7 @@ class MCPService:
             "params": params,
         }
 
-    def _apply_field_masks(
-        self, data: Any, field_masks: dict[str, Any]
-    ) -> Any:
+    def _apply_field_masks(self, data: Any, field_masks: dict[str, Any]) -> Any:
         """Apply field masking to response data.
 
         Args:

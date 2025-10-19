@@ -79,4 +79,6 @@ class Tool(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<Tool(id={self.id}, name={self.name}, type={self.type.value}, org_id={self.org_id})>"
+        return (
+            f"<Tool(id={self.id}, name={self.name}, type={self.type.value}, org_id={self.org_id})>"
+        )

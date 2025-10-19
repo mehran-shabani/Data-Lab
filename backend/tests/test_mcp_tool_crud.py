@@ -1,6 +1,5 @@
 """Tests for MCP Tool CRUD operations."""
 
-import uuid
 
 import pytest
 from httpx import AsyncClient
@@ -127,9 +126,7 @@ async def test_create_postgres_query_tool(
                 "required": ["id"],
             },
             "output_schema": {"type": "array"},
-            "exec_config": {
-                "query_template": "SELECT id, name FROM patients WHERE id = %(id)s"
-            },
+            "exec_config": {"query_template": "SELECT id, name FROM patients WHERE id = %(id)s"},
             "rate_limit_per_min": 60,
             "enabled": True,
         }
@@ -224,9 +221,7 @@ async def test_list_tools(
 
 
 @pytest.mark.asyncio
-async def test_get_tool(
-    override_get_db, auth_headers, test_org, test_datasource, test_membership
-):
+async def test_get_tool(override_get_db, auth_headers, test_org, test_datasource, test_membership):
     """Test getting a specific tool."""
     async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
         # Create a tool first
@@ -342,9 +337,7 @@ async def test_create_tool_without_datasource_id_for_postgres_query(
             "type": "POSTGRES_QUERY",
             "input_schema": {},
             "output_schema": {},
-            "exec_config": {
-                "query_template": "SELECT * FROM table"
-            },
+            "exec_config": {"query_template": "SELECT * FROM table"},
         }
 
         response = await client.post(
@@ -358,9 +351,7 @@ async def test_create_tool_without_datasource_id_for_postgres_query(
 
 
 @pytest.mark.asyncio
-async def test_create_tool_duplicate_name(
-    override_get_db, auth_headers, test_org, test_membership
-):
+async def test_create_tool_duplicate_name(override_get_db, auth_headers, test_org, test_membership):
     """Test creating a tool with duplicate name."""
     async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
         payload = {
