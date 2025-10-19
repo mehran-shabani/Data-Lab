@@ -54,6 +54,9 @@ class DataSource(Base):
     organization: Mapped["Organization"] = relationship(  # noqa: F821
         "Organization", back_populates="datasources"
     )
+    tools: Mapped[list["Tool"]] = relationship(  # noqa: F821
+        "Tool", back_populates="datasource", cascade="all, delete-orphan"
+    )
 
     # Indexes
     __table_args__ = (

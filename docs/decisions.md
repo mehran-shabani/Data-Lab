@@ -577,3 +577,35 @@ master_key = aws_kms.decrypt(encrypted_master_key_blob)
 ## یادداشت نهایی
 
 این تصمیمات برای **MVP فعلی** گرفته شده‌اند و ممکن است در آینده با رشد پروژه تغییر کنند. هر تغییری باید با ADR جدید مستند شود.
+
+## ADR-0003: عدم اجازه به SQL دلخواه در MVP
+
+**تاریخ**: 2025-10-19
+
+**وضعیت**: پذیرفته‌شده
+
+**زمینه**:
+در MVP ابزارهای نوع POSTGRES_QUERY باید بتوانند به دیتابیس متصل شوند و query اجرا کنند. این یک ریسک امنیتی جدی برای SQL Injection است.
+
+**تصمیم**:
+- ابزارهای POSTGRES_QUERY فقط از **query_template** امن استفاده می‌کنند
+- Template ها با پارامترهای نام‌گذاری شده (named parameters) تعریف می‌شوند
+- مثال: `SELECT id, name FROM patients WHERE id = %(id)s`
+- هیچ SQL دلخواهی از سمت کاربر پذیرفته نمی‌شود
+- پارامترها با استفاده از psycopg parameterized queries به‌صورت امن bind می‌شوند
+
+**پیامدها**:
+✅ امنیت بالا - SQL Injection غیرممکن است
+✅ Audit trail واضح - همه query ها از پیش تعریف شده‌اند
+✅ Performance بهتر - query plan caching
+❌ انعطاف کمتر - نیاز به تعریف template برای هر query
+❌ Dynamic queries پیچیده‌تر هستند
+
+**جایگزین‌های بررسی‌شده**:
+1. **SQL Validation Library**: پیچیدگی بالا، false positive/negative
+2. **Read-Only User**: کافی نیست، Data Exfiltration همچنان ممکن است
+3. **Query Builder**: Over-engineering برای MVP
+
+**نتیجه**:
+Template-based approach بهترین تعادل بین امنیت و قابلیت استفاده برای MVP است.
+

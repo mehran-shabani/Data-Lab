@@ -1,10 +1,12 @@
 /**
- * API client for DataSource management
+ * API client for Farda MCP Platform
  */
 
 import { redirect } from 'next/navigation';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
+// ========== Common Types ==========
 
 export interface DataSourceOut {
   id: string;
@@ -307,3 +309,307 @@ export async function checkDraftConnectivity(
 
   return data;
 }
+
+/**
+ * Test connectivity for draft config before saving
+ */
+export async function testDataSourceConfig(
+  orgId: string,
+  payload: DataSourceTestCheck
+): Promise<ConnectivityCheckOut> {
+  return checkDraftConnectivity(orgId, payload);
+}
+
+export const DataSourceAPI = {
+  list: listDataSources,
+  get: getDataSource,
+  create: createDataSource,
+  update: updateDataSource,
+  delete: deleteDataSource,
+  check: checkDataSourceConnectivity,
+  testConfig: testDataSourceConfig,
+};
+
+// ========== Tool Types ==========
+
+export type ToolType = 'POSTGRES_QUERY' | 'REST_CALL' | 'CUSTOM';
+
+export interface ToolOut {
+  id: string;
+  org_id: string;
+  name: string;
+  version: string;
+  type: ToolType;
+  datasource_id: string | null;
+  input_schema: Record<string, any>;
+  output_schema: Record<string, any>;
+  exec_config: Record<string, any>;
+  rate_limit_per_min: number | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolCreate {
+  name: string;
+  version?: string;
+  type: ToolType;
+  datasource_id?: string | null;
+  input_schema?: Record<string, any>;
+  output_schema?: Record<string, any>;
+  exec_config?: Record<string, any>;
+  rate_limit_per_min?: number | null;
+  enabled?: boolean;
+}
+
+export interface ToolUpdate {
+  name?: string;
+  version?: string;
+  type?: ToolType;
+  datasource_id?: string | null;
+  input_schema?: Record<string, any>;
+  output_schema?: Record<string, any>;
+  exec_config?: Record<string, any>;
+  rate_limit_per_min?: number | null;
+  enabled?: boolean;
+}
+
+export interface InvokeIn {
+  params: Record<string, any>;
+}
+
+export interface InvokeOut {
+  ok: boolean;
+  data: any;
+  masked: boolean;
+  trace_id: string;
+  error: string | null;
+}
+
+// ========== Tool API Functions ==========
+
+/**
+ * Helper to make API requests with authentication
+ */
+async function apiRequest<T>(path: string, options: RequestInit): Promise<T> {
+  const token = getAuthToken();
+  if (!token) {
+    redirect('/signin');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+  if (options.method === 'DELETE' && response.status === 204) {
+    return undefined as any;
+  }
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    handleApiError(response, data);
+  }
+
+  return data;
+}
+
+export async function listTools(orgId: string): Promise<ToolOut[]> {
+  return apiRequest<ToolOut[]>(`/orgs/${orgId}/tools/`, {
+    method: 'GET',
+  });
+}
+
+export async function getTool(orgId: string, toolId: string): Promise<ToolOut> {
+  return apiRequest<ToolOut>(`/orgs/${orgId}/tools/${toolId}`, {
+    method: 'GET',
+  });
+}
+
+export async function createTool(orgId: string, payload: ToolCreate): Promise<ToolOut> {
+  return apiRequest<ToolOut>(`/orgs/${orgId}/tools/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateTool(orgId: string, toolId: string, payload: ToolUpdate): Promise<ToolOut> {
+  return apiRequest<ToolOut>(`/orgs/${orgId}/tools/${toolId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTool(orgId: string, toolId: string): Promise<void> {
+  return apiRequest<void>(`/orgs/${orgId}/tools/${toolId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function invokeTool(orgId: string, toolId: string, payload: InvokeIn): Promise<InvokeOut> {
+  return apiRequest<InvokeOut>(`/orgs/${orgId}/tools/${toolId}/invoke`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export const ToolAPI = {
+  list: listTools,
+  get: getTool,
+  create: createTool,
+  update: updateTool,
+  delete: deleteTool,
+  invoke: invokeTool,
+};
+
+// ========== MCP Server Types ==========
+
+export type MCPServerStatus = 'ENABLED' | 'DISABLED';
+
+export interface MCPServerOut {
+  id: string;
+  org_id: string;
+  name: string;
+  status: MCPServerStatus;
+  created_at: string;
+  updated_at: string;
+  plain_api_key?: string | null;
+}
+
+export interface MCPServerCreate {
+  name: string;
+}
+
+// ========== MCP Server API ==========
+
+export async function listMCPServers(orgId: string): Promise<MCPServerOut[]> {
+  return apiRequest<MCPServerOut[]>(`/orgs/${orgId}/mcp/servers`, {
+    method: 'GET',
+  });
+}
+
+export async function getMCPServer(orgId: string, serverId: string): Promise<MCPServerOut> {
+  return apiRequest<MCPServerOut>(`/orgs/${orgId}/mcp/servers/${serverId}`, {
+    method: 'GET',
+  });
+}
+
+export async function createMCPServer(orgId: string, payload: MCPServerCreate): Promise<MCPServerOut> {
+  return apiRequest<MCPServerOut>(`/orgs/${orgId}/mcp/servers`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function rotateMCPServerKey(orgId: string, serverId: string): Promise<MCPServerOut> {
+  return apiRequest<MCPServerOut>(`/orgs/${orgId}/mcp/servers/${serverId}/rotate-key`, {
+    method: 'POST',
+  });
+}
+
+export async function enableMCPServer(orgId: string, serverId: string): Promise<MCPServerOut> {
+  return apiRequest<MCPServerOut>(`/orgs/${orgId}/mcp/servers/${serverId}/enable`, {
+    method: 'POST',
+  });
+}
+
+export async function disableMCPServer(orgId: string, serverId: string): Promise<MCPServerOut> {
+  return apiRequest<MCPServerOut>(`/orgs/${orgId}/mcp/servers/${serverId}/disable`, {
+    method: 'POST',
+  });
+}
+
+export const MCPServerAPI = {
+  list: listMCPServers,
+  get: getMCPServer,
+  create: createMCPServer,
+  rotateKey: rotateMCPServerKey,
+  enable: enableMCPServer,
+  disable: disableMCPServer,
+};
+
+// ========== Policy Types ==========
+
+export type PolicyEffect = 'ALLOW' | 'DENY';
+export type PolicyResourceType = 'TOOL' | 'DATASOURCE';
+
+export interface PolicyOut {
+  id: string;
+  org_id: string;
+  name: string;
+  effect: PolicyEffect;
+  resource_type: PolicyResourceType;
+  resource_id: string;
+  conditions: Record<string, any>;
+  field_masks: Record<string, any> | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PolicyCreate {
+  name: string;
+  effect: PolicyEffect;
+  resource_type: PolicyResourceType;
+  resource_id: string;
+  conditions?: Record<string, any>;
+  field_masks?: Record<string, any> | null;
+  enabled?: boolean;
+}
+
+export interface PolicyUpdate {
+  name?: string;
+  effect?: PolicyEffect;
+  resource_type?: PolicyResourceType;
+  resource_id?: string;
+  conditions?: Record<string, any>;
+  field_masks?: Record<string, any> | null;
+  enabled?: boolean;
+}
+
+// ========== Policy API ==========
+
+export async function listPolicies(orgId: string): Promise<PolicyOut[]> {
+  return apiRequest<PolicyOut[]>(`/orgs/${orgId}/policies/`, {
+    method: 'GET',
+  });
+}
+
+export async function getPolicy(orgId: string, policyId: string): Promise<PolicyOut> {
+  return apiRequest<PolicyOut>(`/orgs/${orgId}/policies/${policyId}`, {
+    method: 'GET',
+  });
+}
+
+export async function createPolicy(orgId: string, payload: PolicyCreate): Promise<PolicyOut> {
+  return apiRequest<PolicyOut>(`/orgs/${orgId}/policies/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updatePolicy(orgId: string, policyId: string, payload: PolicyUpdate): Promise<PolicyOut> {
+  return apiRequest<PolicyOut>(`/orgs/${orgId}/policies/${policyId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePolicy(orgId: string, policyId: string): Promise<void> {
+  return apiRequest<void>(`/orgs/${orgId}/policies/${policyId}`, {
+    method: 'DELETE',
+  });
+}
+
+export const PolicyAPI = {
+  list: listPolicies,
+  get: getPolicy,
+  create: createPolicy,
+  update: updatePolicy,
+  delete: deletePolicy,
+};
