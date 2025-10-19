@@ -326,3 +326,84 @@ graph TB
 * [Next.js Documentation](https://nextjs.org/docs)
 * [SQLAlchemy 2.0](https://docs.sqlalchemy.org/en/20/)
 * [MCP Protocol Specification](https://modelcontextprotocol.io/)
+
+## MCP Manager and Tool Invoke Pipeline
+
+### Overview
+
+The MCP Manager is a comprehensive system for managing executable tools that can be invoked through a secure pipeline with policy enforcement, rate limiting, audit logging, and field masking capabilities.
+
+### Components
+
+#### 1. Tool Registry
+- **Tool Model**: Stores tool definitions with type (POSTGRES_QUERY, REST_CALL, CUSTOM), input/output schemas, and execution configuration
+- **Execution Config**: JSON-based configuration that varies by tool type:
+  - POSTGRES_QUERY: `query_template` with parameterized queries (no arbitrary SQL)
+  - REST_CALL: `method`, `path`, `timeout_ms`
+  - CUSTOM: Custom handler (MVP: simple echo)
+
+#### 2. MCP Server Management
+- **API Key Generation**: Secure random API keys (bcrypt hashed)
+- **One-Time Display**: API keys shown only on create/rotate operations
+- **Status Control**: Enable/disable servers independently
+
+#### 3. Policy Engine
+- **Policy Types**: ALLOW/DENY with role-based conditions
+- **Field Masking**: Remove sensitive fields from responses (e.g., `{"remove": ["phone", "ssn"]}`)
+- **Resource Types**: TOOL and DATASOURCE policies
+
+#### 4. Rate Limiting
+- **Token Bucket Algorithm**: Per-tool rate limiting (in-memory for MVP)
+- **Configurable Limits**: Per-tool `rate_limit_per_min` or org-level defaults
+- **429 Response**: Persian error message on limit exceeded
+
+#### 5. Audit & Metrics
+- **Trace ID**: Unique identifier for each invocation
+- **Logging**: Actor, org, tool, result, latency, timestamp
+- **Metrics**: Total calls, errors, p50/p95 latency (in-memory counters)
+
+### Tool Invocation Pipeline
+
+```mermaid
+graph TD
+    A[Client Request] --> B[Authentication & Org Guard]
+    B --> C[Load Tool]
+    C --> D{Tool Enabled?}
+    D -->|No| E[403 Forbidden]
+    D -->|Yes| F[Check Policies]
+    F --> G{Policy DENY?}
+    G -->|Yes| H[403 Denied by Policy]
+    G -->|No| I[Check Rate Limit]
+    I --> J{Limit Exceeded?}
+    J -->|Yes| K[429 Too Many Requests]
+    J -->|No| L[Load DataSource if needed]
+    L --> M[Execute Tool]
+    M --> N{Success?}
+    N -->|No| O[Log Error & Return]
+    N -->|Yes| P[Apply Field Masks]
+    P --> Q[Audit & Metrics]
+    Q --> R[Return Response with Trace ID]
+```
+
+### Security Measures
+
+1. **No Arbitrary SQL**: POSTGRES_QUERY tools use parameterized templates only
+2. **Bound Parameters**: All query parameters are validated and bound safely
+3. **One-Time Key Display**: MCP Server API keys shown only once (create/rotate)
+4. **Policy Enforcement**: All invocations checked against org policies
+5. **Audit Trail**: Complete logging of all invocations with trace IDs
+
+### Performance Considerations
+
+- **In-Process Execution**: ASGI-based, no external process spawning
+- **Connection Pooling**: DataSource connections managed efficiently
+- **Rate Limiting**: Prevents abuse and ensures fair usage
+- **Field Masking**: Applied post-execution to minimize overhead
+
+### MVP Limitations (Production Improvements)
+
+1. **Rate Limiter**: Currently in-memory; migrate to Redis for distributed systems
+2. **Metrics**: In-memory counters; migrate to Prometheus/StatsD
+3. **Audit Log**: Logging to stdout; migrate to dedicated audit table/service
+4. **REST_CALL**: Basic implementation; add retry, circuit breaker in V1
+

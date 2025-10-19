@@ -588,3 +588,74 @@ secrets:
 ---
 
 **یادآوری**: امنیت یک فرآیند مداوم است، نه یک هدف یکباره.
+
+## MCP Manager Security
+
+### API Key Management
+
+**One-Time Display Protocol**
+- MCP Server API keys are generated using cryptographically secure random tokens
+- Keys are immediately hashed using bcrypt before storage
+- Plain-text keys are shown ONLY during:
+  1. Initial server creation
+  2. Key rotation operations
+- Keys are never stored in plain text and cannot be retrieved after creation
+
+**Key Rotation**
+- Old key is immediately invalidated on rotation
+- New key is generated and displayed once
+- Rotation events are logged in audit trail
+
+### SQL Injection Prevention
+
+**Query Template System**
+- POSTGRES_QUERY tools MUST use parameterized templates
+- Template example: `SELECT id, name FROM users WHERE id = %(id)s`
+- Arbitrary SQL execution is strictly prohibited
+- Parameters are bound using psycopg's safe parameter binding
+
+**Validation**
+- Tool creation validates presence of `query_template` in exec_config
+- Parameters are type-checked against input_schema
+- No string concatenation or interpolation in queries
+
+### Policy-Based Access Control
+
+**Policy Enforcement Pipeline**
+1. Check all enabled policies for resource (tool/datasource)
+2. Evaluate conditions (e.g., user roles)
+3. Apply DENY policies first (fail-closed)
+4. Collect field masks from ALLOW policies
+5. Execute tool if allowed
+
+**Field Masking**
+- Applied POST-execution to response data
+- Removes specified fields from dict/list responses
+- Example: `{"remove": ["ssn", "credit_card"]}`
+- Masked responses flagged with `masked: true`
+
+### Rate Limiting
+
+**Per-Tool Limits**
+- Token bucket algorithm (configurable per-minute rate)
+- Prevents DoS and ensures fair resource usage
+- 429 response with Persian error message
+- MVP: In-memory (single-process), V1: Redis-backed (distributed)
+
+### Audit Trail
+
+**Logged Information**
+- Trace ID (unique per invocation)
+- Actor (user_id)
+- Organization
+- Tool ID
+- Result (success/failure)
+- Latency (milliseconds)
+- Timestamp
+
+**Security Events**
+- Policy denials
+- Rate limit violations
+- Authentication failures
+- API key rotations
+

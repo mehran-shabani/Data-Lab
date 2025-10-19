@@ -32,6 +32,12 @@ def create_app() -> FastAPI:
     app.include_router(health.router, tags=["health"])
     app.include_router(auth_router)
     app.include_router(connectors_router.router, prefix="/api")
+    
+    # MCP Manager routers
+    from apps.mcp.router import tools_router, mcp_router, policies_router
+    app.include_router(tools_router, prefix="/api")
+    app.include_router(mcp_router, prefix="/api")
+    app.include_router(policies_router, prefix="/api")
 
     return app
 

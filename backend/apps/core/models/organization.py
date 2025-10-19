@@ -27,6 +27,15 @@ class Organization(Base):
     datasources: Mapped[list["DataSource"]] = relationship(  # noqa: F821
         "DataSource", back_populates="organization", cascade="all, delete-orphan"
     )
+    tools: Mapped[list["Tool"]] = relationship(  # noqa: F821
+        "Tool", back_populates="organization", cascade="all, delete-orphan"
+    )
+    mcp_servers: Mapped[list["MCPServer"]] = relationship(  # noqa: F821
+        "MCPServer", back_populates="organization", cascade="all, delete-orphan"
+    )
+    policies: Mapped[list["Policy"]] = relationship(  # noqa: F821
+        "Policy", back_populates="organization", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Organization(id={self.id}, name={self.name}, plan={self.plan})>"

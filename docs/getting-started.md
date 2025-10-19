@@ -498,3 +498,130 @@ curl -X POST http://localhost:8000/api/orgs/{org_id}/datasources/ \
 ---
 
 **نکته**: این یک نسخه MVP است. ویژگی‌های بیشتر در پرامپت‌های بعدی اضافه خواهد شد.
+
+## سناریوی نمونه: ساخت Tool و اجرای Invoke
+
+### مرحله ۱: ساخت DataSource
+
+```bash
+curl -X POST http://localhost:8080/api/orgs/{org_id}/datasources/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Patient DB",
+    "type": "POSTGRES",
+    "host": "localhost",
+    "port": 5432,
+    "database": "hospital",
+    "username": "readonly",
+    "password": "secure_password",
+    "schema_version": "v1"
+  }'
+```
+
+### مرحله ۲: ساخت Tool با Query Template
+
+```bash
+curl -X POST http://localhost:8080/api/orgs/{org_id}/tools/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "get_patient_by_id",
+    "version": "v1",
+    "type": "POSTGRES_QUERY",
+    "datasource_id": "{datasource_id}",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "integer"}
+      },
+      "required": ["id"]
+    },
+    "output_schema": {
+      "type": "array"
+    },
+    "exec_config": {
+      "query_template": "SELECT id, name, age FROM patients WHERE id = %(id)s"
+    },
+    "rate_limit_per_min": 100,
+    "enabled": true
+  }'
+```
+
+### مرحله ۳: ایجاد Policy (اختیاری)
+
+```bash
+# Policy برای Masking فیلدهای حساس
+curl -X POST http://localhost:8080/api/orgs/{org_id}/policies/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Mask SSN for Developers",
+    "effect": "ALLOW",
+    "resource_type": "TOOL",
+    "resource_id": "{tool_id}",
+    "conditions": {
+      "roles_any_of": ["DEVELOPER"]
+    },
+    "field_masks": {
+      "remove": ["ssn", "national_id"]
+    },
+    "enabled": true
+  }'
+```
+
+### مرحله ۴: تست Tool Invoke
+
+```bash
+curl -X POST http://localhost:8080/api/orgs/{org_id}/tools/{tool_id}/invoke \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "params": {
+      "id": 123
+    }
+  }'
+```
+
+**پاسخ موفق**:
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "id": 123,
+      "name": "John Doe",
+      "age": 45
+    }
+  ],
+  "masked": false,
+  "trace_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "error": null
+}
+```
+
+**پاسخ با Field Masking**:
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "id": 123,
+      "name": "John Doe",
+      "age": 45
+      // "ssn" removed by policy
+    }
+  ],
+  "masked": true,
+  "trace_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "error": null
+}
+```
+
+### مرحله ۵: مشاهده Metrics
+
+```bash
+curl http://localhost:8080/api/orgs/{org_id}/tools/{tool_id}/metrics \
+  -H "Authorization: Bearer $TOKEN"
+```
+
