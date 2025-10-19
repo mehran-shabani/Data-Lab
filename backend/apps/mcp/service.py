@@ -657,7 +657,7 @@ class MCPService:
                 await cur.execute(query_template, params)
                 rows = await cur.fetchall()
                 columns = [desc[0] for desc in cur.description] if cur.description else []
-                return [dict(zip(columns, row)) for row in rows]
+                return [dict(zip(columns, row, strict=True)) for row in rows]
 
     async def _execute_rest_call(self, tool: Tool, params: dict[str, Any]) -> Any:
         """Execute REST API call.
