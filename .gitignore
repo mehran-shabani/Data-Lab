@@ -50,7 +50,7 @@ yarn-error.log*
 lerna-debug.log*
 .npm
 .eslintcache
-
+backend/.ruff_cache
 # Next.js
 .next/
 out/

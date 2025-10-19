@@ -24,6 +24,7 @@ def set_master_key_env(monkeypatch):
     monkeypatch.setenv("SECRETS_MASTER_KEY", test_master_key)
     # Clear cached master key
     import apps.core.crypto
+
     apps.core.crypto._master_key = None
 
 
@@ -119,6 +120,7 @@ def test_load_master_key_missing_env_var(monkeypatch):
     """Test that missing SECRETS_MASTER_KEY raises error."""
     monkeypatch.delenv("SECRETS_MASTER_KEY", raising=False)
     import apps.core.crypto
+
     apps.core.crypto._master_key = None
 
     with pytest.raises(EncryptionError, match="SECRETS_MASTER_KEY environment variable is not set"):
@@ -129,6 +131,7 @@ def test_load_master_key_invalid_hex(monkeypatch):
     """Test that invalid hex raises error."""
     monkeypatch.setenv("SECRETS_MASTER_KEY", "not-a-valid-hex")
     import apps.core.crypto
+
     apps.core.crypto._master_key = None
 
     with pytest.raises(EncryptionError, match="Failed to decode"):

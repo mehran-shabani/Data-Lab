@@ -91,9 +91,7 @@ class DataSourceCreatePostgres(DataSourceBase):
             )
 
         if has_dsn and has_explicit:
-            raise ValueError(
-                "Provide either 'dsn' or explicit fields, not both"
-            )
+            raise ValueError("Provide either 'dsn' or explicit fields, not both")
 
         return self
 
@@ -120,8 +118,7 @@ class DataSourceCreateRest(DataSourceBase):
 
 # Union type for create
 DataSourceCreate = Annotated[
-    DataSourceCreatePostgres | DataSourceCreateRest,
-    Field(discriminator="type")
+    DataSourceCreatePostgres | DataSourceCreateRest, Field(discriminator="type")
 ]
 
 
@@ -155,8 +152,7 @@ class DataSourceUpdateRest(BaseModel):
 
 # Union type for update
 DataSourceUpdate = Annotated[
-    DataSourceUpdatePostgres | DataSourceUpdateRest,
-    Field(discriminator="type")
+    DataSourceUpdatePostgres | DataSourceUpdateRest, Field(discriminator="type")
 ]
 
 
@@ -234,6 +230,5 @@ class DataSourceTestCheckRest(BaseModel):
 
 # Union type for test check
 DataSourceTestCheck = Annotated[
-    DataSourceTestCheckPostgres | DataSourceTestCheckRest,
-    Field(discriminator="type")
+    DataSourceTestCheckPostgres | DataSourceTestCheckRest, Field(discriminator="type")
 ]

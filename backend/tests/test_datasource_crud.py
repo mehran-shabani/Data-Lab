@@ -67,13 +67,12 @@ def set_master_key_env(monkeypatch):
     test_master_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     monkeypatch.setenv("SECRETS_MASTER_KEY", test_master_key)
     import apps.core.crypto
+
     apps.core.crypto._master_key = None
 
 
 @pytest.mark.asyncio
-async def test_create_postgres_datasource_with_dsn(
-    override_get_db, auth_headers, test_org
-):
+async def test_create_postgres_datasource_with_dsn(override_get_db, auth_headers, test_org):
     """Test creating a PostgreSQL DataSource with DSN."""
     async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
         payload = {

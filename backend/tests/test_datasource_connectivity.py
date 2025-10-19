@@ -67,13 +67,12 @@ def set_master_key_env(monkeypatch):
     test_master_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     monkeypatch.setenv("SECRETS_MASTER_KEY", test_master_key)
     import apps.core.crypto
+
     apps.core.crypto._master_key = None
 
 
 @pytest.mark.asyncio
-async def test_check_postgres_connectivity_draft_success(
-    override_get_db, auth_headers, test_org
-):
+async def test_check_postgres_connectivity_draft_success(override_get_db, auth_headers, test_org):
     """Test PostgreSQL connectivity check for draft (without saving)."""
     with patch("psycopg.connect") as mock_connect:
         # Mock successful connection
@@ -103,9 +102,7 @@ async def test_check_postgres_connectivity_draft_success(
 
 
 @pytest.mark.asyncio
-async def test_check_postgres_connectivity_draft_failure(
-    override_get_db, auth_headers, test_org
-):
+async def test_check_postgres_connectivity_draft_failure(override_get_db, auth_headers, test_org):
     """Test PostgreSQL connectivity check failure."""
     with patch("psycopg.connect") as mock_connect:
         # Mock connection failure
@@ -134,9 +131,7 @@ async def test_check_postgres_connectivity_draft_failure(
 
 
 @pytest.mark.asyncio
-async def test_check_rest_connectivity_draft_success(
-    override_get_db, auth_headers, test_org
-):
+async def test_check_rest_connectivity_draft_success(override_get_db, auth_headers, test_org):
     """Test REST API connectivity check for draft."""
     with patch("httpx.AsyncClient") as mock_client_class:
         # Mock successful REST response
@@ -168,9 +163,7 @@ async def test_check_rest_connectivity_draft_success(
 
 
 @pytest.mark.asyncio
-async def test_check_rest_connectivity_draft_with_api_key(
-    override_get_db, auth_headers, test_org
-):
+async def test_check_rest_connectivity_draft_with_api_key(override_get_db, auth_headers, test_org):
     """Test REST API connectivity check with API key authentication."""
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
@@ -201,9 +194,7 @@ async def test_check_rest_connectivity_draft_with_api_key(
 
 
 @pytest.mark.asyncio
-async def test_check_rest_connectivity_draft_failure(
-    override_get_db, auth_headers, test_org
-):
+async def test_check_rest_connectivity_draft_failure(override_get_db, auth_headers, test_org):
     """Test REST API connectivity check failure."""
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
@@ -232,9 +223,7 @@ async def test_check_rest_connectivity_draft_failure(
 
 
 @pytest.mark.asyncio
-async def test_check_saved_datasource_connectivity(
-    override_get_db, auth_headers, test_org
-):
+async def test_check_saved_datasource_connectivity(override_get_db, auth_headers, test_org):
     """Test connectivity check for a saved datasource."""
     with patch("psycopg.connect") as mock_connect:
         mock_conn = MagicMock()
@@ -269,9 +258,7 @@ async def test_check_saved_datasource_connectivity(
 
 
 @pytest.mark.asyncio
-async def test_check_connectivity_datasource_not_found(
-    override_get_db, auth_headers, test_org
-):
+async def test_check_connectivity_datasource_not_found(override_get_db, auth_headers, test_org):
     """Test connectivity check for non-existent datasource."""
     import uuid
 

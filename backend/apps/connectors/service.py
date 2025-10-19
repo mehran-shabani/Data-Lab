@@ -39,9 +39,7 @@ class DataSourceService:
         self.session = session
         self.repo = DataSourceRepository(session)
 
-    async def create_datasource(
-        self, org_id: UUID, payload: DataSourceCreate
-    ) -> DataSource:
+    async def create_datasource(self, org_id: UUID, payload: DataSourceCreate) -> DataSource:
         """Create a new DataSource with encrypted config.
 
         Args:
