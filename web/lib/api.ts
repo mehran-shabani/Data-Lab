@@ -102,7 +102,7 @@ function getAuthToken(): string | null {
 /**
  * Handle API errors
  */
-function handleApiError(response: Response, data: any): never {
+function handleApiError(response: Response, data: unknown): never {
   if (response.status === 401 || response.status === 403) {
     // Redirect to signin
     if (typeof window !== 'undefined') {
@@ -341,9 +341,9 @@ export interface ToolOut {
   version: string;
   type: ToolType;
   datasource_id: string | null;
-  input_schema: Record<string, any>;
-  output_schema: Record<string, any>;
-  exec_config: Record<string, any>;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+  exec_config: Record<string, unknown>;
   rate_limit_per_min: number | null;
   enabled: boolean;
   created_at: string;
@@ -355,9 +355,9 @@ export interface ToolCreate {
   version?: string;
   type: ToolType;
   datasource_id?: string | null;
-  input_schema?: Record<string, any>;
-  output_schema?: Record<string, any>;
-  exec_config?: Record<string, any>;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  exec_config?: Record<string, unknown>;
   rate_limit_per_min?: number | null;
   enabled?: boolean;
 }
@@ -367,20 +367,20 @@ export interface ToolUpdate {
   version?: string;
   type?: ToolType;
   datasource_id?: string | null;
-  input_schema?: Record<string, any>;
-  output_schema?: Record<string, any>;
-  exec_config?: Record<string, any>;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  exec_config?: Record<string, unknown>;
   rate_limit_per_min?: number | null;
   enabled?: boolean;
 }
 
 export interface InvokeIn {
-  params: Record<string, any>;
+  params: Record<string, unknown>;
 }
 
 export interface InvokeOut {
   ok: boolean;
-  data: any;
+  data: unknown;
   masked: boolean;
   trace_id: string;
   error: string | null;
@@ -407,7 +407,7 @@ async function apiRequest<T>(path: string, options: RequestInit): Promise<T> {
   });
 
   if (options.method === 'DELETE' && response.status === 204) {
-    return undefined as any;
+    return undefined as never;
   }
 
   const data = await response.json().catch(() => ({}));
@@ -545,8 +545,8 @@ export interface PolicyOut {
   effect: PolicyEffect;
   resource_type: PolicyResourceType;
   resource_id: string;
-  conditions: Record<string, any>;
-  field_masks: Record<string, any> | null;
+  conditions: Record<string, unknown>;
+  field_masks: Record<string, unknown> | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -557,8 +557,8 @@ export interface PolicyCreate {
   effect: PolicyEffect;
   resource_type: PolicyResourceType;
   resource_id: string;
-  conditions?: Record<string, any>;
-  field_masks?: Record<string, any> | null;
+  conditions?: Record<string, unknown>;
+  field_masks?: Record<string, unknown> | null;
   enabled?: boolean;
 }
 
@@ -567,8 +567,8 @@ export interface PolicyUpdate {
   effect?: PolicyEffect;
   resource_type?: PolicyResourceType;
   resource_id?: string;
-  conditions?: Record<string, any>;
-  field_masks?: Record<string, any> | null;
+  conditions?: Record<string, unknown>;
+  field_masks?: Record<string, unknown> | null;
   enabled?: boolean;
 }
 

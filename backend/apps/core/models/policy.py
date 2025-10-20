@@ -5,10 +5,11 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, Enum, ForeignKey, Index, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import Base
+from ._types import JSONB_COMPAT
 
 
 class PolicyEffect(str, enum.Enum):
@@ -50,13 +51,13 @@ class Policy(Base):
         UUID(as_uuid=True), nullable=False, comment="ID of the tool or datasource"
     )
     conditions: Mapped[dict] = mapped_column(
-        JSONB,
+        JSONB_COMPAT,
         nullable=False,
         default=dict,
         comment='Optional conditions: {"roles_any_of": ["ORG_ADMIN", "DEVELOPER"]}',
     )
     field_masks: Mapped[dict | None] = mapped_column(
-        JSONB,
+        JSONB_COMPAT,
         nullable=True,
         comment='Field masking rules: {"remove": ["phone", "national_id"]}',
     )

@@ -5,10 +5,11 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, Enum, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import Base
+from ._types import JSONB_COMPAT
 
 
 class ToolType(str, enum.Enum):
@@ -42,13 +43,13 @@ class Tool(Base):
         comment="Optional DataSource binding",
     )
     input_schema: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict, comment="JSON Schema for input validation"
+        JSONB_COMPAT, nullable=False, default=dict, comment="JSON Schema for input validation"
     )
     output_schema: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict, comment="JSON Schema for output validation"
+        JSONB_COMPAT, nullable=False, default=dict, comment="JSON Schema for output validation"
     )
     exec_config: Mapped[dict] = mapped_column(
-        JSONB,
+        JSONB_COMPAT,
         nullable=False,
         default=dict,
         comment="Execution config: query_template, params_def, path, method, etc.",
