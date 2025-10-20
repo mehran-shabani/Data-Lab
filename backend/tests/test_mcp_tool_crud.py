@@ -1,6 +1,5 @@
 """Tests for MCP Tool CRUD operations."""
 
-
 import pytest
 from httpx import AsyncClient
 
