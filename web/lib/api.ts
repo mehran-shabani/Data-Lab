@@ -111,7 +111,21 @@ function handleApiError(response: Response, data: unknown): never {
     }
   }
 
-  const errorMessage = data?.detail || `خطا در عملیات (کد ${response.status})`;
+  let errorMessage = `خطا در عملیات (کد ${response.status})`;
+
+  if (typeof data === 'object' && data !== null) {
+    const detail = (data as { detail?: unknown }).detail;
+
+    if (typeof detail === 'string' && detail.trim().length > 0) {
+      errorMessage = detail;
+    } else if (Array.isArray(detail)) {
+      const firstMessage = detail.find((item): item is string => typeof item === 'string' && item.trim().length > 0);
+      if (firstMessage) {
+        errorMessage = firstMessage;
+      }
+    }
+  }
+
   throw new Error(errorMessage);
 }
 
@@ -406,17 +420,17 @@ async function apiRequest<T>(path: string, options: RequestInit): Promise<T> {
     },
   });
 
-  if (options.method === 'DELETE' && response.status === 204) {
-    return undefined as never;
+  if (options.method?.toUpperCase() === 'DELETE' && response.status === 204) {
+    return undefined as unknown as T;
   }
 
-  const data = await response.json().catch(() => ({}));
+  const data: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
     handleApiError(response, data);
   }
 
-  return data;
+  return data as T;
 }
 
 export async function listTools(orgId: string): Promise<ToolOut[]> {

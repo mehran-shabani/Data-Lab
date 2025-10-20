@@ -1,8 +1,69 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ToolAPI, ToolOut, InvokeOut } from '@/lib/api';
+
+const UNKNOWN_ERROR_MESSAGE = 'یک خطای ناشناخته رخ داد.';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getSampleValueFromSchema(property: Record<string, unknown>): unknown {
+  const rawType = property.type;
+  const type =
+    typeof rawType === 'string'
+      ? rawType
+      : Array.isArray(rawType)
+        ? rawType.find((item): item is string => typeof item === 'string')
+        : undefined;
+
+  switch (type) {
+    case 'string':
+      return '';
+    case 'number':
+    case 'integer':
+      return 0;
+    case 'boolean':
+      return false;
+    case 'array':
+      return [];
+    case 'object':
+      return {};
+    default:
+      return null;
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error;
+  }
+
+  try {
+    const serialized = JSON.stringify(error);
+    if (serialized !== undefined) {
+      return serialized;
+    }
+  } catch {
+    // ignore serialization errors
+  }
+
+  return UNKNOWN_ERROR_MESSAGE;
+}
+
+function formatJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return UNKNOWN_ERROR_MESSAGE;
+  }
+}
 
 export default function TestToolPage() {
   const params = useParams();
@@ -10,7 +71,7 @@ export default function TestToolPage() {
   const toolId = params.id as string;
 
   const [tool, setTool] = useState<ToolOut | null>(null);
-  const [params Input, setParamsInput] = useState('{}');
+  const [paramsInput, setParamsInput] = useState<string>('{}');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<InvokeOut | null>(null);
   const [error, setError] = useState('');
@@ -18,30 +79,35 @@ export default function TestToolPage() {
   // Mock org_id for MVP
   const orgId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
-  useEffect(() => {
-    loadTool();
-  }, [toolId]);
-
-  async function loadTool() {
+  const loadTool = useCallback(async () => {
     try {
       const data = await ToolAPI.get(orgId, toolId);
       setTool(data);
       // Initialize params from input_schema
-      if (data.input_schema && Object.keys(data.input_schema).length > 0) {
-        const sampleParams: any = {};
-        const properties = data.input_schema.properties || {};
+      const schemaProperties = (data.input_schema as { properties?: unknown }).properties;
+      if (isRecord(schemaProperties)) {
+        const properties = schemaProperties as Record<string, unknown>;
+        const sampleParams: Record<string, unknown> = {};
+        let hasSample = false;
+
         for (const [key, value] of Object.entries(properties)) {
-          const prop = value as any;
-          if (prop.type === 'string') sampleParams[key] = '';
-          else if (prop.type === 'number' || prop.type === 'integer') sampleParams[key] = 0;
-          else sampleParams[key] = null;
+          if (!isRecord(value)) continue;
+          sampleParams[key] = getSampleValueFromSchema(value);
+          hasSample = true;
         }
-        setParamsInput(JSON.stringify(sampleParams, null, 2));
+
+        if (hasSample) {
+          setParamsInput(JSON.stringify(sampleParams, null, 2));
+        }
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     }
-  }
+  }, [orgId, toolId]);
+
+  useEffect(() => {
+    void loadTool();
+  }, [loadTool]);
 
   async function handleInvoke() {
     setLoading(true);
@@ -49,11 +115,11 @@ export default function TestToolPage() {
     setError('');
 
     try {
-      const params = JSON.parse(paramsInput);
-      const data = await ToolAPI.invoke(orgId, toolId, { params });
+      const parsedParams = JSON.parse(paramsInput) as Record<string, unknown>;
+      const data = await ToolAPI.invoke(orgId, toolId, { params: parsedParams });
       setResult(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -120,7 +186,7 @@ export default function TestToolPage() {
               <div>
                 <h3 className="font-semibold mb-2">نتیجه:</h3>
                 <pre className="bg-gray-100 p-4 rounded overflow-auto text-sm font-mono" dir="ltr">
-                  {JSON.stringify(result.data, null, 2)}
+                  {formatJson(result.data)}
                 </pre>
               </div>
             )}
@@ -141,7 +207,7 @@ export default function TestToolPage() {
             <div className="grid grid-cols-2 gap-2">
               <span className="text-gray-600">Execution Config:</span>
               <pre className="text-xs font-mono overflow-auto" dir="ltr">
-                {JSON.stringify(tool.exec_config, null, 2)}
+                {formatJson(tool.exec_config)}
               </pre>
             </div>
             {tool.datasource_id && (

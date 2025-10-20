@@ -1,8 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { MCPServerAPI, MCPServerOut } from '@/lib/api';
+
+const UNKNOWN_ERROR_MESSAGE = 'خطای ناشناخته رخ داد.';
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error;
+  }
+
+  try {
+    const serialized = JSON.stringify(error);
+    if (serialized !== undefined) {
+      return serialized;
+    }
+  } catch {
+    // ignore serialization issues
+  }
+
+  return UNKNOWN_ERROR_MESSAGE;
+}
 
 export default function MCPServerDetailPage() {
   const params = useParams();
@@ -16,21 +39,22 @@ export default function MCPServerDetailPage() {
   // Mock org_id for MVP
   const orgId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
-  useEffect(() => {
-    loadServer();
-  }, [serverId]);
-
-  async function loadServer() {
+  const loadServer = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await MCPServerAPI.get(orgId, serverId);
       setServer(data);
-    } catch (err: any) {
-      alert(`خطا: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`خطا: ${getErrorMessage(err)}`);
       router.back();
     } finally {
       setLoading(false);
     }
-  }
+  }, [orgId, router, serverId]);
+
+  useEffect(() => {
+    void loadServer();
+  }, [loadServer]);
 
   async function handleRotateKey() {
     if (!confirm('آیا از گردش کلید API مطمئن هستید؟ کلید فعلی غیرفعال خواهد شد.')) return;
@@ -39,8 +63,8 @@ export default function MCPServerDetailPage() {
       const result = await MCPServerAPI.rotateKey(orgId, serverId);
       setNewApiKey(result.plain_api_key || null);
       await loadServer();
-    } catch (err: any) {
-      alert(`خطا: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`خطا: ${getErrorMessage(err)}`);
     }
   }
 
@@ -67,7 +91,7 @@ export default function MCPServerDetailPage() {
 
       {newApiKey && (
         <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4 mb-6">
-          <p className="text-red-600 font-semibold mb-2">⚠️ کلید جدید - فقط یک بار نمایش داده می‌شود!</p>
+          <p className="text-red-600 font-semibold mb-2">این کلید جدید است - آن را در جای امن ذخیره کنید!</p>
           <div className="bg-white p-3 rounded font-mono text-sm break-all" dir="ltr">
             {newApiKey}
           </div>
@@ -83,7 +107,7 @@ export default function MCPServerDetailPage() {
       <div className="bg-white shadow rounded-lg p-6 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-sm text-gray-600">نام سرور</p>
+            <p className="text-sm text-gray-600">نام سرویس</p>
             <p className="font-semibold">{server.name}</p>
           </div>
           <div>
@@ -99,7 +123,7 @@ export default function MCPServerDetailPage() {
             <p>{new Date(server.created_at).toLocaleString('fa-IR')}</p>
           </div>
           <div>
-            <p className="text-sm text-gray-600">آخرین به‌روزرسانی</p>
+            <p className="text-sm text-gray-600">آخرین بروزرسانی</p>
             <p>{new Date(server.updated_at).toLocaleString('fa-IR')}</p>
           </div>
         </div>
@@ -115,7 +139,7 @@ export default function MCPServerDetailPage() {
           </button>
 
           <p className="text-sm text-gray-600">
-            ⚠️ با گردش کلید، کلید قدیمی غیرفعال شده و کلید جدید فقط یک بار نمایش داده می‌شود.
+            با گردش کلید، کلید قبلی بلافاصله غیرفعال می‌شود و تنها این کلید جدید معتبر خواهد بود.
           </p>
         </div>
       </div>
