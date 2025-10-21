@@ -182,7 +182,7 @@ export default function TestToolPage() {
               )}
             </div>
 
-            {result.ok && result.data && (
+            {result.ok && result.data != null && (
               <div>
                 <h3 className="font-semibold mb-2">نتیجه:</h3>
                 <pre className="bg-gray-100 p-4 rounded overflow-auto text-sm font-mono" dir="ltr">
