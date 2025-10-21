@@ -2,6 +2,108 @@
 
 این سند تصمیمات معماری کلیدی پروژه Farda MCP را ثبت می‌کند.
 
+## ADR-0004: لایه انتزاع کانکتورها و Circuit-Breaker در MVP
+
+**تاریخ**: 2025-10-21
+
+**وضعیت**: پذیرفته شده ✅
+
+### زمینه
+
+با گسترش سیستم برای پشتیبانی از انواع مختلف DataSource (Postgres, REST, MongoDB, GraphQL, S3)، نیاز به:
+* یکسان‌سازی interface برای کانکتورهای مختلف
+* مدیریت خطاهای شبکه‌ای و ناپایداری سرویس‌های خارجی
+* مانیتورینگ و متریک‌گیری از عملکرد کانکتورها
+* پایداری سیستم در برابر خطاهای موقت
+
+### گزینه‌های بررسی شده
+
+**۱. پیاده‌سازی مستقیم در Service Layer**
+* ✅ سادگی اولیه
+* ❌ تکرار کد برای هر نوع
+* ❌ سخت شدن نگهداری با افزایش انواع
+* ❌ عدم امکان test کردن جداگانه
+
+**۲. لایه انتزاع با Interface مشترک** ⭐
+* ✅ کد تمیز و قابل نگهداری
+* ✅ افزودن نوع جدید آسان
+* ✅ Test کردن راحت‌تر
+* ✅ جداسازی Concerns
+* ❌ Overhead اولیه برای طراحی
+
+**۳. استفاده از کتابخانه Third-party (مثل Tenacity)**
+* ✅ کد کمتر
+* ❌ وابستگی بیشتر
+* ❌ کنترل کمتر بر رفتار
+* ❌ امکان سفارشی‌سازی محدود
+
+### تصمیم
+
+**لایه انتزاع کانکتور با Registry Pattern** + **پیاده‌سازی Resilience Patterns دستی**
+
+**معماری:**
+```python
+# Base Interface
+class Connector(ABC):
+    async def ping() -> tuple[bool, str]
+    async def sample(params: dict) -> Any
+    async def close() -> None
+
+# Registry
+CONNECTOR_REGISTRY = {
+    "POSTGRES": PostgresConnector,
+    "REST": RestConnector,
+    ...
+}
+
+def make_connector(type, conf, org_id, ds_id) -> Connector
+```
+
+**Resilience Patterns:**
+1. **Retry with Exponential Backoff**
+   - دکوراتور async
+   - فقط برای خطاهای transient (network, timeout)
+   - پارامترهای قابل تنظیم
+
+2. **Circuit Breaker**
+   - وضعیت‌ها: CLOSED, OPEN, HALF_OPEN
+   - ذخیره‌سازی state در حافظه (per DataSource)
+   - آستانه: 5 خطای متوالی
+   - پنجره خنک‌سازی: 30 ثانیه
+
+3. **Metrics Collection**
+   - calls_total, errors_total
+   - latency (avg, P95)
+   - last success/error timestamp
+   - circuit breaker state
+
+### پیامدها
+
+**مثبت:**
+* کد ساختاریافته و قابل نگهداری
+* افزودن کانکتور جدید در < 100 خط کد
+* امکان test کردن مستقل هر کانکتور
+* پایداری بالا در برابر خطاهای موقت
+* مانیتورینگ و observability
+
+**منفی:**
+* کد بیشتر نسبت به پیاده‌سازی ساده
+* نیاز به درک patterns توسط توسعه‌دهندگان
+* Circuit Breaker در حافظه (state از بین می‌رود در restart)
+
+**محدودیت‌های MVP:**
+* Circuit Breaker state فقط در حافظه (V1: Redis)
+* Metrics فقط در حافظه (V1: Prometheus/TimescaleDB)
+* خطرات Sample/Playground محدود اما موجود (V1: Query Whitelisting)
+
+### منابع
+
+* [Microsoft: Circuit Breaker Pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker)
+* [Martin Fowler: CircuitBreaker](https://martinfowler.com/bliki/CircuitBreaker.html)
+* [AWS: Implementing Microservices Patterns](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/microservices.html)
+
+---
+
 ## ADR-0001: انتخاب FastAPI برای Backend
 
 **تاریخ**: 2025-10-18
