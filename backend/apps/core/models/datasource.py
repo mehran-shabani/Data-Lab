@@ -16,6 +16,9 @@ class DataSourceType(str, enum.Enum):
 
     POSTGRES = "POSTGRES"
     REST = "REST"
+    MONGODB = "MONGODB"
+    GRAPHQL = "GRAPHQL"
+    S3 = "S3"
 
 
 class DataSource(Base):

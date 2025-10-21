@@ -1,6 +1,6 @@
 # راهنمای شروع سریع Farda MCP
 
-> **نکته**: این راهنما بعد از پیاده‌سازی پرامپت‌های ۱ تا ۳ نوشته شده است و شامل احراز هویت، چندمستأجری، و مدیریت DataSource است.
+> **نکته**: این راهنما بعد از پیاده‌سازی پرامپت‌های ۱ تا ۵ نوشته شده است و شامل احراز هویت، چندمستأجری، مدیریت DataSource، سیستم MCP، و Connector Abstraction با Resilience است.
 
 این راهنما شما را گام‌به‌گام در نصب و راه‌اندازی محلی Farda MCP همراهی می‌کند.
 
@@ -624,4 +624,131 @@ curl -X POST http://localhost:8080/api/orgs/{org_id}/tools/{tool_id}/invoke \
 curl http://localhost:8080/api/orgs/{org_id}/tools/{tool_id}/metrics \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+
+
+## استفاده از کانکتورهای مختلف DataSource
+
+### MongoDB
+
+```bash
+# ایجاد DataSource MongoDB
+curl -X POST http://localhost:8080/api/orgs/${ORG_ID}/datasources/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "MongoDB Production",
+    "type": "MONGODB",
+    "uri": "mongodb+srv://user:pass@cluster.mongodb.net/",
+    "db": "mydb",
+    "collection": "users",
+    "timeout_ms": 3000
+  }'
+
+# Sample query
+curl -X POST http://localhost:8080/api/orgs/${ORG_ID}/datasources/${DS_ID}/sample \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "params": {
+      "collection": "users",
+      "filter": {"status": "active"},
+      "limit": 5
+    }
+  }'
+```
+
+### GraphQL
+
+```bash
+# ایجاد DataSource GraphQL
+curl -X POST http://localhost:8080/api/orgs/${ORG_ID}/datasources/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "GraphQL API",
+    "type": "GRAPHQL",
+    "base_url": "https://api.example.com/graphql",
+    "auth_type": "BEARER",
+    "bearer_token": "your-token-here",
+    "timeout_ms": 4000
+  }'
+
+# اجرای کوئری
+curl -X POST http://localhost:8080/api/orgs/${ORG_ID}/datasources/${DS_ID}/sample \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "params": {
+      "query": "{ users(limit: 5) { id name email } }",
+      "variables": {}
+    }
+  }'
+```
+
+### S3/MinIO
+
+```bash
+# ایجاد DataSource S3
+curl -X POST http://localhost:8080/api/orgs/${ORG_ID}/datasources/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "MinIO Storage",
+    "type": "S3",
+    "endpoint": "http://minio:9000",
+    "region": "us-east-1",
+    "bucket": "my-bucket",
+    "access_key": "minioadmin",
+    "secret_key": "minioadmin",
+    "use_path_style": true,
+    "timeout_ms": 4000
+  }'
+
+# لیست اشیاء
+curl -X POST http://localhost:8080/api/orgs/${ORG_ID}/datasources/${DS_ID}/sample \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "params": {
+      "prefix": "data/",
+      "max_keys": 10
+    }
+  }'
+```
+
+### بررسی سلامت و متریک‌ها
+
+```bash
+# Ping یک DataSource
+curl -X POST http://localhost:8080/api/orgs/${ORG_ID}/datasources/${DS_ID}/ping \
+  -H "Authorization: Bearer $TOKEN"
+
+# دریافت متریک‌ها
+curl -X GET http://localhost:8080/api/orgs/${ORG_ID}/datasources/${DS_ID}/metrics \
+  -H "Authorization: Bearer $TOKEN"
+
+# خلاصه سلامت تمام DataSource های سازمان
+curl -X GET http://localhost:8080/api/orgs/${ORG_ID}/datasources/health \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**نمونه پاسخ Metrics:**
+```json
+{
+  "calls_total": 150,
+  "errors_total": 3,
+  "avg_latency_ms": 45.23,
+  "p95_ms": 89.5,
+  "last_ok_ts": 1698765432.0,
+  "last_err_ts": 1698763200.0,
+  "state": "CLOSED"
+}
+```
+
+**Circuit Breaker States:**
+- `CLOSED`: عملکرد عادی
+- `OPEN`: اتصال تعلیق شده (خطاهای زیاد)
+- `HALF_OPEN`: در حال تست بازیابی
+
 

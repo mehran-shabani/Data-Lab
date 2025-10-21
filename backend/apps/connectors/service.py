@@ -1,11 +1,10 @@
 """Service layer for DataSource management with encryption and connectivity checks."""
 
 import logging
+import time
 from typing import Any
 from uuid import UUID
 
-import httpx
-import psycopg
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.core.crypto import (
@@ -19,15 +18,24 @@ from apps.core.crypto import (
 from apps.core.models import DataSource, DataSourceType
 from apps.core.schemas.datasource import (
     DataSourceCreate,
+    DataSourceCreateGraphQL,
+    DataSourceCreateMongoDB,
     DataSourceCreatePostgres,
     DataSourceCreateRest,
+    DataSourceCreateS3,
     DataSourceTestCheck,
     DataSourceUpdate,
+    DataSourceUpdateGraphQL,
+    DataSourceUpdateMongoDB,
     DataSourceUpdatePostgres,
     DataSourceUpdateRest,
+    DataSourceUpdateS3,
 )
 
+from .metrics import metrics_registry
+from .registry import make_connector
 from .repo import DataSourceRepository
+from .resilience import CircuitBreakerOpen, circuit_breaker_registry
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +225,7 @@ class DataSourceService:
         return connection_config
 
     async def check_connectivity(self, org_id: UUID, datasource_id: UUID) -> tuple[bool, str]:
-        """Check connectivity for a saved DataSource.
+        """Check connectivity for a saved DataSource using connector.
 
         Args:
             org_id: Organization ID.
@@ -231,13 +239,31 @@ class DataSourceService:
             return False, "DataSource not found"
 
         config = await self.load_connection_config(org_id, datasource_id)
-
-        if datasource.type == DataSourceType.POSTGRES:
-            return await self.check_postgres(config)
-        elif datasource.type == DataSourceType.REST:
-            return await self.check_rest(config)
-        else:
-            return False, f"Unknown datasource type: {datasource.type}"
+        
+        try:
+            connector = make_connector(datasource.type.value, config, org_id, datasource_id)
+            start_time = time.time()
+            
+            try:
+                ok, details = await connector.ping()
+                latency_ms = (time.time() - start_time) * 1000
+                
+                # Record metrics
+                metrics_registry.record_call(org_id, datasource_id, latency_ms, ok)
+                
+                # Update circuit breaker state in metrics
+                breaker = circuit_breaker_registry.get_breaker(org_id, datasource_id)
+                metrics_registry.update_state(org_id, datasource_id, breaker.state.value)
+                
+                return ok, details
+            finally:
+                await connector.close()
+                
+        except CircuitBreakerOpen as e:
+            return False, str(e)
+        except Exception as e:
+            logger.error(f"Connectivity check failed for ds_id={datasource_id}: {e}", exc_info=True)
+            return False, f"Unexpected error: {str(e)}"
 
     async def check_connectivity_draft(self, payload: DataSourceTestCheck) -> tuple[bool, str]:
         """Check connectivity for a draft DataSource (without saving).
@@ -249,13 +275,26 @@ class DataSourceService:
             Tuple of (ok: bool, details: str).
         """
         config = self._payload_to_config(payload)
-
-        if payload.type == "POSTGRES":
-            return await self.check_postgres(config)
-        elif payload.type == "REST":
-            return await self.check_rest(config)
-        else:
-            return False, f"Unknown datasource type: {payload.type}"
+        
+        # Use dummy IDs for draft checks (no metrics recorded)
+        from uuid import uuid4
+        dummy_org_id = uuid4()
+        dummy_ds_id = uuid4()
+        
+        try:
+            connector = make_connector(payload.type, config, dummy_org_id, dummy_ds_id)
+            
+            try:
+                ok, details = await connector.ping()
+                return ok, details
+            finally:
+                await connector.close()
+                
+        except CircuitBreakerOpen as e:
+            return False, str(e)
+        except Exception as e:
+            logger.error(f"Draft connectivity check failed: {e}", exc_info=True)
+            return False, f"Unexpected error: {str(e)}"
 
     # ===== Private Helper Methods =====
 
@@ -268,8 +307,8 @@ class DataSourceService:
         Returns:
             Connection config as dict.
         """
-        if isinstance(payload, (DataSourceCreatePostgres,)):
-            if payload.dsn:
+        if isinstance(payload, (DataSourceCreatePostgres,)) or (hasattr(payload, "dsn") and hasattr(payload, "host")):
+            if hasattr(payload, "dsn") and payload.dsn:
                 return {"dsn": payload.dsn}
             else:
                 return {
@@ -279,35 +318,43 @@ class DataSourceService:
                     "username": payload.username,
                     "password": payload.password,
                 }
-        elif isinstance(payload, (DataSourceCreateRest,)):
+        elif isinstance(payload, (DataSourceCreateRest,)) or (hasattr(payload, "base_url") and not hasattr(payload, "uri") and not hasattr(payload, "bucket")):
             return {
                 "base_url": payload.base_url,
                 "auth_type": payload.auth_type,
                 "headers": payload.headers or {},
                 "api_key": payload.api_key,
                 "bearer_token": payload.bearer_token,
+                "timeout_ms": getattr(payload, "timeout_ms", 10000),
+            }
+        elif isinstance(payload, (DataSourceCreateMongoDB,)) or hasattr(payload, "uri"):
+            return {
+                "uri": payload.uri,
+                "db": payload.db,
+                "collection": payload.collection,
+                "timeout_ms": getattr(payload, "timeout_ms", 3000),
+            }
+        elif isinstance(payload, (DataSourceCreateGraphQL,)):
+            return {
+                "base_url": payload.base_url,
+                "auth_type": payload.auth_type,
+                "headers": payload.headers or {},
+                "api_key": payload.api_key,
+                "bearer_token": payload.bearer_token,
+                "timeout_ms": payload.timeout_ms,
+            }
+        elif isinstance(payload, (DataSourceCreateS3,)) or hasattr(payload, "bucket"):
+            return {
+                "endpoint": payload.endpoint,
+                "region": payload.region,
+                "bucket": payload.bucket,
+                "access_key": payload.access_key,
+                "secret_key": payload.secret_key,
+                "use_path_style": payload.use_path_style,
+                "timeout_ms": getattr(payload, "timeout_ms", 4000),
             }
         else:
-            # Handle test check types
-            if hasattr(payload, "dsn"):
-                if payload.dsn:
-                    return {"dsn": payload.dsn}
-                else:
-                    return {
-                        "host": payload.host,
-                        "port": payload.port or 5432,
-                        "database": payload.database,
-                        "username": payload.username,
-                        "password": payload.password,
-                    }
-            else:
-                return {
-                    "base_url": payload.base_url,
-                    "auth_type": payload.auth_type,
-                    "headers": payload.headers or {},
-                    "api_key": payload.api_key,
-                    "bearer_token": payload.bearer_token,
-                }
+            raise ValueError(f"Unsupported payload type: {type(payload)}")
 
     def _has_sensitive_updates(self, payload: DataSourceUpdate) -> bool:
         """Check if payload contains sensitive field updates.
@@ -337,6 +384,38 @@ class DataSourceService:
                     payload.headers is not None,
                     payload.api_key is not None,
                     payload.bearer_token is not None,
+                ]
+            )
+        elif isinstance(payload, DataSourceUpdateMongoDB):
+            return any(
+                [
+                    payload.uri is not None,
+                    payload.db is not None,
+                    payload.collection is not None,
+                    payload.timeout_ms is not None,
+                ]
+            )
+        elif isinstance(payload, DataSourceUpdateGraphQL):
+            return any(
+                [
+                    payload.base_url is not None,
+                    payload.auth_type is not None,
+                    payload.headers is not None,
+                    payload.api_key is not None,
+                    payload.bearer_token is not None,
+                    payload.timeout_ms is not None,
+                ]
+            )
+        elif isinstance(payload, DataSourceUpdateS3):
+            return any(
+                [
+                    payload.endpoint is not None,
+                    payload.region is not None,
+                    payload.bucket is not None,
+                    payload.access_key is not None,
+                    payload.secret_key is not None,
+                    payload.use_path_style is not None,
+                    payload.timeout_ms is not None,
                 ]
             )
         return False
@@ -384,74 +463,143 @@ class DataSourceService:
             if payload.bearer_token is not None:
                 updated_config["bearer_token"] = payload.bearer_token
 
+        elif isinstance(payload, DataSourceUpdateMongoDB):
+            if payload.uri is not None:
+                updated_config["uri"] = payload.uri
+            if payload.db is not None:
+                updated_config["db"] = payload.db
+            if payload.collection is not None:
+                updated_config["collection"] = payload.collection
+            if payload.timeout_ms is not None:
+                updated_config["timeout_ms"] = payload.timeout_ms
+
+        elif isinstance(payload, DataSourceUpdateGraphQL):
+            if payload.base_url is not None:
+                updated_config["base_url"] = payload.base_url
+            if payload.auth_type is not None:
+                updated_config["auth_type"] = payload.auth_type
+            if payload.headers is not None:
+                updated_config["headers"] = payload.headers
+            if payload.api_key is not None:
+                updated_config["api_key"] = payload.api_key
+            if payload.bearer_token is not None:
+                updated_config["bearer_token"] = payload.bearer_token
+            if payload.timeout_ms is not None:
+                updated_config["timeout_ms"] = payload.timeout_ms
+
+        elif isinstance(payload, DataSourceUpdateS3):
+            if payload.endpoint is not None:
+                updated_config["endpoint"] = payload.endpoint
+            if payload.region is not None:
+                updated_config["region"] = payload.region
+            if payload.bucket is not None:
+                updated_config["bucket"] = payload.bucket
+            if payload.access_key is not None:
+                updated_config["access_key"] = payload.access_key
+            if payload.secret_key is not None:
+                updated_config["secret_key"] = payload.secret_key
+            if payload.use_path_style is not None:
+                updated_config["use_path_style"] = payload.use_path_style
+            if payload.timeout_ms is not None:
+                updated_config["timeout_ms"] = payload.timeout_ms
+
         return updated_config
 
-    # ===== Connectivity Check Implementations =====
+    # ===== New Connector Methods =====
 
-    async def check_postgres(self, config: dict[str, Any]) -> tuple[bool, str]:
-        """Check PostgreSQL connectivity.
+    async def sample_datasource(
+        self, org_id: UUID, datasource_id: UUID, params: dict[str, Any]
+    ) -> Any:
+        """Execute sample query/operation on DataSource.
 
         Args:
-            config: Connection config dict.
+            org_id: Organization ID.
+            datasource_id: DataSource ID.
+            params: Query/operation parameters (connector-specific).
 
         Returns:
-            Tuple of (ok: bool, details: str).
+            Sample result.
+
+        Raises:
+            ValueError: If datasource not found.
         """
+        datasource = await self.repo.get_by_id(org_id, datasource_id)
+        if not datasource:
+            raise ValueError("DataSource not found")
+
+        config = await self.load_connection_config(org_id, datasource_id)
+        
         try:
-            if "dsn" in config:
-                dsn = config["dsn"]
-            else:
-                # Build DSN from components
-                dsn = (
-                    f"postgresql://{config['username']}:{config['password']}"
-                    f"@{config['host']}:{config['port']}/{config['database']}"
+            connector = make_connector(datasource.type.value, config, org_id, datasource_id)
+            start_time = time.time()
+            
+            try:
+                result = await connector.sample(params)
+                latency_ms = (time.time() - start_time) * 1000
+                
+                # Record metrics
+                success = result.get("ok", True) if isinstance(result, dict) else True
+                metrics_registry.record_call(org_id, datasource_id, latency_ms, success)
+                
+                # Update circuit breaker state
+                breaker = circuit_breaker_registry.get_breaker(org_id, datasource_id)
+                metrics_registry.update_state(org_id, datasource_id, breaker.state.value)
+                
+                return result
+            finally:
+                await connector.close()
+                
+        except CircuitBreakerOpen as e:
+            raise ValueError(str(e))
+        except Exception as e:
+            logger.error(f"Sample failed for ds_id={datasource_id}: {e}", exc_info=True)
+            raise
+
+    def get_datasource_metrics(self, org_id: UUID, datasource_id: UUID) -> dict[str, Any]:
+        """Get metrics for a DataSource.
+
+        Args:
+            org_id: Organization ID.
+            datasource_id: DataSource ID.
+
+        Returns:
+            Metrics dict.
+        """
+        metrics = metrics_registry.get_metrics(org_id, datasource_id)
+        return metrics.to_dict()
+
+    async def get_org_health_summary(self, org_id: UUID) -> list[dict[str, Any]]:
+        """Get health summary for all DataSources in an organization.
+
+        Args:
+            org_id: Organization ID.
+
+        Returns:
+            List of health summaries.
+        """
+        datasources = await self.list_datasources(org_id, skip=0, limit=1000)
+        all_metrics = metrics_registry.get_all_for_org(org_id)
+        
+        health_summary = []
+        for ds in datasources:
+            metrics = all_metrics.get(ds.id)
+            
+            if metrics:
+                ok = metrics.state != "OPEN" and (
+                    metrics.last_ok_ts is not None and
+                    (metrics.last_err_ts is None or metrics.last_ok_ts > metrics.last_err_ts)
                 )
-
-            # Test connection (synchronous driver for simplicity in MVP)
-            conn = psycopg.connect(dsn, connect_timeout=5)
-            conn.close()
-
-            return True, "PostgreSQL connection successful"
-
-        except Exception as e:
-            logger.warning(f"PostgreSQL connectivity check failed: {e}")
-            return False, f"Connection failed: {str(e)}"
-
-    async def check_rest(self, config: dict[str, Any]) -> tuple[bool, str]:
-        """Check REST API connectivity.
-
-        Args:
-            config: Connection config dict.
-
-        Returns:
-            Tuple of (ok: bool, details: str).
-        """
-        try:
-            base_url = config["base_url"]
-            auth_type = config.get("auth_type", "NONE")
-            headers = config.get("headers", {}).copy()
-
-            # Add authentication headers
-            if auth_type == "API_KEY" and config.get("api_key"):
-                headers["X-API-Key"] = config["api_key"]
-            elif auth_type == "BEARER" and config.get("bearer_token"):
-                headers["Authorization"] = f"Bearer {config['bearer_token']}"
-
-            # Test connection with HEAD or GET request
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                # Try HEAD first, fallback to GET
-                try:
-                    response = await client.head(base_url, headers=headers, follow_redirects=True)
-                except Exception:
-                    response = await client.get(base_url, headers=headers, follow_redirects=True)
-
-                if response.status_code < 500:
-                    return True, f"REST API reachable (status: {response.status_code})"
-                else:
-                    return False, f"REST API returned error (status: {response.status_code})"
-
-        except httpx.TimeoutException:
-            return False, "Connection timeout"
-        except Exception as e:
-            logger.warning(f"REST connectivity check failed: {e}")
-            return False, f"Connection failed: {str(e)}"
+            else:
+                ok = None  # Unknown (never tested)
+            
+            health_summary.append({
+                "ds_id": str(ds.id),
+                "name": ds.name,
+                "type": ds.type.value,
+                "ok": ok,
+                "state": metrics.state if metrics else "UNKNOWN",
+                "last_ok_ts": metrics.last_ok_ts if metrics else None,
+                "last_err_ts": metrics.last_err_ts if metrics else None,
+            })
+        
+        return health_summary

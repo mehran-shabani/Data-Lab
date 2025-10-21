@@ -95,8 +95,15 @@ backend/
       schemas/         # Pydantic schemas برای validation
       routers/         # API endpoints
         health.py      # Health check و version
-    mcp/              # پروتکل MCP (رزرو شده برای پرامپت بعدی)
-    connectors/       # کانکتورهای خارجی (رزرو شده)
+    mcp/              # پروتکل MCP
+    connectors/       # سیستم کانکتورها
+      base.py          # Interface انتزاعی
+      registry.py      # ثبت و ساخت کانکتورها
+      resilience.py    # Retry/Backoff/Circuit-Breaker
+      metrics.py       # سیستم متریک‌ها
+      impl_*.py        # پیاده‌سازی کانکتورها
+      service.py       # منطق تجاری
+      router.py        # API endpoints
   tests/              # تست‌های واحد و یکپارچگی
   alembic/            # Database migrations
 ```
@@ -243,14 +250,118 @@ graph TB
 └─────────────────────────────────────────┘
 ```
 
+## Connector Abstraction & Registry
+
+### معماری کانکتورها
+
+سیستم Connectors با استفاده از الگوی **Factory** و **Strategy** پیاده‌سازی شده است:
+
+```mermaid
+graph TD
+    A[Client] --> B[Registry]
+    B --> C{Type?}
+    C -->|POSTGRES| D[PostgresConnector]
+    C -->|REST| E[RestConnector]
+    C -->|MONGODB| F[MongoDBConnector]
+    C -->|GRAPHQL| G[GraphQLConnector]
+    C -->|S3| H[S3Connector]
+    D --> I[Base Connector]
+    E --> I
+    F --> I
+    G --> I
+    H --> I
+    I --> J[ping]
+    I --> K[sample]
+    I --> L[close]
+```
+
+**Base Interface:**
+```python
+class Connector(ABC):
+    async def ping() -> tuple[bool, str]
+    async def sample(params: dict) -> Any
+    async def close() -> None
+```
+
+**Registry:**
+- مدیریت متمرکز کانکتورها
+- ساخت دینامیک بر اساس نوع
+- Dependency Injection برای config
+
+### Resilience Patterns
+
+**۱. Retry با Exponential Backoff:**
+- تلاش مجدد برای خطاهای شبکه‌ای
+- تأخیر نمایی بین تلاش‌ها
+- حداکثر تعداد تلاش و تأخیر قابل تنظیم
+
+**۲. Circuit Breaker:**
+```
+States: CLOSED → OPEN → HALF_OPEN → CLOSED
+         (normal) (failing) (testing) (recovered)
+```
+
+**جریان Circuit Breaker:**
+```mermaid
+sequenceDiagram
+    Client->>+CircuitBreaker: Request
+    CircuitBreaker->>CircuitBreaker: Check State
+    alt State = CLOSED
+        CircuitBreaker->>+Connector: Execute
+        Connector-->>-CircuitBreaker: Result
+        alt Success
+            CircuitBreaker->>Metrics: Record Success
+        else Failure (N times)
+            CircuitBreaker->>CircuitBreaker: Open Circuit
+            CircuitBreaker->>Metrics: Record Failure
+        end
+    else State = OPEN
+        CircuitBreaker-->>Client: Fast Fail (503)
+    else State = HALF_OPEN
+        CircuitBreaker->>+Connector: Test Execute
+        Connector-->>-CircuitBreaker: Result
+        alt Success
+            CircuitBreaker->>CircuitBreaker: Close Circuit
+        else Failure
+            CircuitBreaker->>CircuitBreaker: Re-Open Circuit
+        end
+    end
+    CircuitBreaker-->>-Client: Response
+```
+
+**پارامترهای پیش‌فرض:**
+- `failure_threshold`: 5 خطا
+- `timeout_seconds`: 30 ثانیه
+- `success_threshold` در HALF_OPEN: 2
+
+### Metrics & Monitoring
+
+**متریک‌های DataSource:**
+- `calls_total`: تعداد کل فراخوانی‌ها
+- `errors_total`: تعداد خطاها
+- `avg_latency_ms`: میانگین تأخیر (EMA)
+- `p95_ms`: تأخیر P95 (تقریبی)
+- `last_ok_ts`: زمان آخرین اتصال موفق
+- `last_err_ts`: زمان آخرین خطا
+- `state`: وضعیت Circuit Breaker
+
+**Endpoints:**
+- `GET /orgs/{org_id}/datasources/{ds_id}/metrics`
+- `GET /orgs/{org_id}/datasources/health`
+- `POST /orgs/{org_id}/datasources/{ds_id}/ping`
+- `POST /orgs/{org_id}/datasources/{ds_id}/sample`
+
 ## الگوهای طراحی (Design Patterns)
 
 ### Backend
 
 * **Repository Pattern**: جداسازی منطق دسترسی به داده
 * **Dependency Injection**: با استفاده از FastAPI Depends
-* **Factory Pattern**: `create_app()` برای ساخت application
+* **Factory Pattern**: `create_app()` برای ساخت application و `make_connector()` برای کانکتورها
 * **Settings Pattern**: مدیریت تنظیمات با Pydantic
+* **Strategy Pattern**: کانکتورهای مختلف با interface یکسان
+* **Circuit Breaker Pattern**: مدیریت خطاهای شبکه
+* **Retry Pattern**: تلاش مجدد با Exponential Backoff
 
 ### Frontend
 

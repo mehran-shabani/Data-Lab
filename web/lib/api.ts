@@ -11,7 +11,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/a
 export interface DataSourceOut {
   id: string;
   name: string;
-  type: 'POSTGRES' | 'REST';
+  type: 'POSTGRES' | 'REST' | 'MONGODB' | 'GRAPHQL' | 'S3';
   schema_version: string;
   created_at: string;
   updated_at: string;
@@ -40,7 +40,47 @@ export interface DataSourceCreateRest {
   bearer_token?: string;
 }
 
-export type DataSourceCreate = DataSourceCreatePostgres | DataSourceCreateRest;
+export interface DataSourceCreateMongoDB {
+  name: string;
+  type: 'MONGODB';
+  schema_version?: string;
+  uri: string;
+  db: string;
+  collection?: string;
+  timeout_ms?: number;
+}
+
+export interface DataSourceCreateGraphQL {
+  name: string;
+  type: 'GRAPHQL';
+  schema_version?: string;
+  base_url: string;
+  auth_type: 'NONE' | 'API_KEY' | 'BEARER';
+  headers?: Record<string, string>;
+  api_key?: string;
+  bearer_token?: string;
+  timeout_ms?: number;
+}
+
+export interface DataSourceCreateS3 {
+  name: string;
+  type: 'S3';
+  schema_version?: string;
+  endpoint: string;
+  region?: string;
+  bucket: string;
+  access_key: string;
+  secret_key: string;
+  use_path_style?: boolean;
+  timeout_ms?: number;
+}
+
+export type DataSourceCreate = 
+  | DataSourceCreatePostgres 
+  | DataSourceCreateRest 
+  | DataSourceCreateMongoDB 
+  | DataSourceCreateGraphQL 
+  | DataSourceCreateS3;
 
 export interface DataSourceUpdatePostgres {
   type: 'POSTGRES';
@@ -63,7 +103,44 @@ export interface DataSourceUpdateRest {
   bearer_token?: string;
 }
 
-export type DataSourceUpdate = DataSourceUpdatePostgres | DataSourceUpdateRest;
+export interface DataSourceUpdateMongoDB {
+  type: 'MONGODB';
+  name?: string;
+  uri?: string;
+  db?: string;
+  collection?: string;
+  timeout_ms?: number;
+}
+
+export interface DataSourceUpdateGraphQL {
+  type: 'GRAPHQL';
+  name?: string;
+  base_url?: string;
+  auth_type?: 'NONE' | 'API_KEY' | 'BEARER';
+  headers?: Record<string, string>;
+  api_key?: string;
+  bearer_token?: string;
+  timeout_ms?: number;
+}
+
+export interface DataSourceUpdateS3 {
+  type: 'S3';
+  name?: string;
+  endpoint?: string;
+  region?: string;
+  bucket?: string;
+  access_key?: string;
+  secret_key?: string;
+  use_path_style?: boolean;
+  timeout_ms?: number;
+}
+
+export type DataSourceUpdate = 
+  | DataSourceUpdatePostgres 
+  | DataSourceUpdateRest 
+  | DataSourceUpdateMongoDB 
+  | DataSourceUpdateGraphQL 
+  | DataSourceUpdateS3;
 
 export interface ConnectivityCheckOut {
   ok: boolean;
@@ -89,7 +166,41 @@ export interface DataSourceTestCheckRest {
   bearer_token?: string;
 }
 
-export type DataSourceTestCheck = DataSourceTestCheckPostgres | DataSourceTestCheckRest;
+export interface DataSourceTestCheckMongoDB {
+  type: 'MONGODB';
+  uri: string;
+  db: string;
+  collection?: string;
+  timeout_ms?: number;
+}
+
+export interface DataSourceTestCheckGraphQL {
+  type: 'GRAPHQL';
+  base_url: string;
+  auth_type: 'NONE' | 'API_KEY' | 'BEARER';
+  headers?: Record<string, string>;
+  api_key?: string;
+  bearer_token?: string;
+  timeout_ms?: number;
+}
+
+export interface DataSourceTestCheckS3 {
+  type: 'S3';
+  endpoint: string;
+  region?: string;
+  bucket: string;
+  access_key: string;
+  secret_key: string;
+  use_path_style?: boolean;
+  timeout_ms?: number;
+}
+
+export type DataSourceTestCheck = 
+  | DataSourceTestCheckPostgres 
+  | DataSourceTestCheckRest 
+  | DataSourceTestCheckMongoDB 
+  | DataSourceTestCheckGraphQL 
+  | DataSourceTestCheckS3;
 
 /**
  * Get authentication token from localStorage
@@ -334,6 +445,149 @@ export async function testDataSourceConfig(
   return checkDraftConnectivity(orgId, payload);
 }
 
+/**
+ * DataSource metrics
+ */
+export interface DataSourceMetrics {
+  calls_total: number;
+  errors_total: number;
+  avg_latency_ms: number;
+  p95_ms: number;
+  last_ok_ts: number | null;
+  last_err_ts: number | null;
+  state: string;
+}
+
+/**
+ * Health summary for a DataSource
+ */
+export interface HealthSummaryItem {
+  ds_id: string;
+  name: string;
+  type: string;
+  ok: boolean | null;
+  state: string;
+  last_ok_ts: number | null;
+  last_err_ts: number | null;
+}
+
+/**
+ * Ping a DataSource
+ */
+export async function pingDataSource(
+  orgId: string,
+  dsId: string
+): Promise<ConnectivityCheckOut> {
+  const token = getAuthToken();
+  if (!token) {
+    redirect('/signin');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/datasources/${dsId}/ping`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    handleApiError(response, data);
+  }
+
+  return data;
+}
+
+/**
+ * Execute sample query on a DataSource
+ */
+export async function sampleDataSource(
+  orgId: string,
+  dsId: string,
+  params: Record<string, unknown> = {}
+): Promise<unknown> {
+  const token = getAuthToken();
+  if (!token) {
+    redirect('/signin');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/datasources/${dsId}/sample`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ params }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    handleApiError(response, data);
+  }
+
+  return data;
+}
+
+/**
+ * Get metrics for a DataSource
+ */
+export async function getDataSourceMetrics(
+  orgId: string,
+  dsId: string
+): Promise<DataSourceMetrics> {
+  const token = getAuthToken();
+  if (!token) {
+    redirect('/signin');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/datasources/${dsId}/metrics`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    handleApiError(response, data);
+  }
+
+  return data;
+}
+
+/**
+ * Get health summary for all DataSources in an organization
+ */
+export async function getDataSourcesHealth(
+  orgId: string
+): Promise<HealthSummaryItem[]> {
+  const token = getAuthToken();
+  if (!token) {
+    redirect('/signin');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/datasources/health`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    handleApiError(response, data);
+  }
+
+  return data;
+}
+
 export const DataSourceAPI = {
   list: listDataSources,
   get: getDataSource,
@@ -342,6 +596,10 @@ export const DataSourceAPI = {
   delete: deleteDataSource,
   check: checkDataSourceConnectivity,
   testConfig: testDataSourceConfig,
+  ping: pingDataSource,
+  sample: sampleDataSource,
+  getMetrics: getDataSourceMetrics,
+  getHealth: getDataSourcesHealth,
 };
 
 // ========== Tool Types ==========
